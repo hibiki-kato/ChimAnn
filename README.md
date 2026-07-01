@@ -1,2 +1,2 @@
 # ChimAnn
-ChimAnn (Kye-mahn) is a DNA annotation software combining Evidence-based method and ab-initio method.
+ChimAnn (Chimeric Annotation software, pronounced Kye-mahn) is DNA annotation software that combines evidence-based and ab initio methods.
