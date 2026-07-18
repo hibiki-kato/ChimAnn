@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="140" viewBox="0 0 640 140" font-family="'Fira Code','DejaVu Sans Mono',monospace">
+  <defs>
+    <clipPath id="reveal">
+      <rect x="0" y="0" height="140" width="0">
+        <animate attributeName="width" values="0;0;560;560;0" keyTimes="0;0.061;0.328;0.878;1" dur="4.5s" repeatCount="indefinite" />
+      </rect>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#reveal)">
+    <text x="20" y="98" font-size="90" font-weight="600" fill="#A5F72B" textLength="540" lengthAdjust="spacingAndGlyphs">ChimAnn</text>
+  </g>
+  <rect y="28" width="8" height="84" fill="#A5F72B">
+    <animate attributeName="x" values="20;20;560;560;20" keyTimes="0;0.061;0.328;0.878;1" dur="4.5s" repeatCount="indefinite" />
+    <animate attributeName="opacity" values="1;0;1;0;1" dur="1s" repeatCount="indefinite" />
+  </rect>
+</svg>
