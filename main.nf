@@ -33,7 +33,8 @@ workflow {
     PSAURON(stranded)
 
     // 3c. Site evaluator: train on EviAnn preliminary annotation, score both strands, split
-    SITESCORE_TRAIN(genome, evidence_gff)
+    // PSAURON.out.csv.collect() is a barrier only: one GPU, so training waits for PSAURON
+    SITESCORE_TRAIN(genome, evidence_gff, PSAURON.out.csv.collect())
     SITESCORE_SCORE(seqs, SITESCORE_TRAIN.out.model.collect())   // value channel: one model, every sequence
     SPLIT_SITES(seqs.join(SITESCORE_SCORE.out.sites))
     sites = SPLIT_SITES.out.plus.mix(SPLIT_SITES.out.minus)                 // (id, strand, tsv)

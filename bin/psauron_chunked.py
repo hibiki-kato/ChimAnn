@@ -20,6 +20,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+csv.field_size_limit(sys.maxsize)   # all_prob cells run to millions of characters
 STOPS = {"TAA", "TAG", "TGA"}
 COLS = ["description", "psauron_is_protein", "in_frame_score", "forward_frame2_score",
         "forward_frame3_score", "reverse_frame1_score", "reverse_frame2_score",
