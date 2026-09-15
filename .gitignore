@@ -26,3 +26,9 @@ venv/
 # Logs / temp
 *.log
 *.tmp
+
+# Nextflow
+.nextflow/
+.nextflow.log*
+work/
+example/output/

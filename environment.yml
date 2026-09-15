@@ -1,0 +1,9 @@
+name: chimann
+channels: [conda-forge, bioconda]
+dependencies:
+  - eviann            # bioconda 2.0.6
+  - gffcompare
+  - gffread
+  - pip
+  - pip:
+      - psauron       # PyPI only (1.1.3)
