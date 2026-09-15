@@ -68,7 +68,7 @@ Outputs under `outdir/`:
 | path | content |
 | --- | --- |
 | `eviann/<genome>.pseudo_label.gff` | EviAnn evidence-based annotation (first pass) |
-| `sitescore/model_dir/` | fine-tuned evaluator (`v8s2_best.pt`, `train_info.json`) |
+| `sitescore/model_dir/` | fine-tuned evaluator (`model.pt`, `train_info.json`) |
 | `uniann/<seq>.{plus,minus}.uniann.gff` | UniAnn ab initio predictions per sequence and strand |
 | `chimann.gff` | final annotation: EviAnn second pass with UniAnn CDS as low-trust evidence |
 

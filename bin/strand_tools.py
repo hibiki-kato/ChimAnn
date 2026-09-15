@@ -32,7 +32,7 @@ def revcomp(fa):
 
 
 def sites_rc(fa, tsv):
-    """siteval '-' rows carry pos = L - p (p = 0-based index in the rc sequence),
+    """sitescore '-' rows carry pos = L - p (p = 0-based index in the rc sequence),
     so the rc 1-based position is L - pos + 1."""
     _, seq = read_one(fa)
     L = len(seq)
