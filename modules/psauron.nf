@@ -1,4 +1,5 @@
-// PSAURON coding-potential scores per sequence and strand (-a required by UniAnn).
+// PSAURON coding-potential scores per sequence and strand (-a required by UniAnn),
+// run in chunks so whole chromosomes fit the GPU (bin/psauron_chunked.py).
 // The '-' run gets the reverse-complemented sequence from REVCOMP.
 process PSAURON {
     tag "$id $strand"
@@ -14,6 +15,6 @@ process PSAURON {
     def dev = task.attempt > 1 ? 'CUDA_VISIBLE_DEVICES=""' : ''
     """
     export OMP_NUM_THREADS=${task.cpus}
-    ${dev} psauron -i ${seq} -a
+    ${dev} psauron_chunked.py ${seq} --chunk ${params.psauron_chunk} --out psauron_score.csv
     """
 }

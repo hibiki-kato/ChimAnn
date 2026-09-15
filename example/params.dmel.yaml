@@ -1,0 +1,9 @@
+# D. melanogaster, EviAnn-paper setup (5 SRA RNA-seq runs, 5 related Drosophila proteomes)
+genome: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Dmel/ref/genome.fna
+rnaseq: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Dmel/rna/rna_fastq_manifest.eviann.txt
+proteins: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Dmel/protein/proteins_related.eviann.faa
+outdir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/chimann/Dmel
+threads: 28
+sitescore_init: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/sitescore/models/convmamba-human-grch38
+sitescore_hparams: '{"epochs": 20, "patience": 5, "batch_size": 2, "grad_accum": 8, "num_workers": 4}'
+eviann_src: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/eviann/src

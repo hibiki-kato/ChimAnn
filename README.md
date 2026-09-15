@@ -76,7 +76,8 @@ Add `-with-report report.html -with-trace trace.txt` for per-task timing and
 memory. Rerun with `-resume` after a failure; completed stages are cached.
 
 **GPU**: PSAURON and sitescore share one GPU (`maxForks 1`). PSAURON needs
-~5 GB per 5 Mb sequence with `-a`; on CUDA OOM it retries once on CPU.
+~1 GB per Mb with `-a`, so sequences are scored in `psauron_chunk` pieces
+(default 4.5 Mb) and stitched; on CUDA OOM a task retries once on CPU.
 Training with the convmamba plug-in fits in ~6 GB at `batch_size 2`.
 
 ### Example
