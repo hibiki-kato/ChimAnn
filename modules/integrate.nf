@@ -16,7 +16,9 @@ process INTEGRATE {
     script:
     def rna  = params.rnaseq   ? "-r ${params.rnaseq}"   : ''
     def prot = params.proteins ? "-p ${params.proteins}" : ''
+    def src = params.eviann_src ? "export PATH=${params.eviann_src}:\$PATH" : ""
     """
+    ${src}
     cp -r ${run_dir}/ run && cd run
     eviann.sh -t ${task.cpus} -g ../${genome} ${rna} ${prot} ${params.eviann_args} \\
         -c ../${ab_initio_gff} --untrusted-cds

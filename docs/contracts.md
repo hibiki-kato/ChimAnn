@@ -51,6 +51,8 @@ second + run: `revcomp` the sequence, `sites_rc` remaps siteval's `-` rows
 the result back (start' = L - end + 1, end' = L - start + 1, strand -).
 
 - Command: `uniann.sh -f seq.fa -p psauron_score.csv -s sites.tsv -n`
+- `uniann.sh` rescales scores by the best donor and aborts unless some donor has
+  prob > 1/e; UNIANN emits an empty GFF for such sequences (e.g. mitochondria).
 - Output: `seq.fa.uniann.gff`. UniAnn is the `uniann/` submodule
   ([hibiki-kato/UniAnn](https://github.com/hibiki-kato/UniAnn)); run its
   `install.sh` once to build `uniann/bin`. Override with `params.uniann_dir`.

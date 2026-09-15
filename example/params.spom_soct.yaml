@@ -5,3 +5,4 @@ outdir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/ChimAnn/examp
 threads: 24
 siteval_init: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/siteval/models/ssm-hsap-v8s5-with_chr1
 siteval_hparams: '{"epochs": 20, "patience": 5, "batch_size": 2, "grad_accum": 8, "num_workers": 2}'
+eviann_src: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/eviann/src   # fork branch path-lookup (has --untrusted-cds)

@@ -48,7 +48,14 @@ process UNIANN {
     def back = strand == '+' ? "cat ${seq}.uniann.gff" : "strand_tools.py flip_gff ${seq} ${seq}.uniann.gff | gffread"
     """
     export OMP_NUM_THREADS=${task.cpus}
-    ${params.uniann_dir}/bin/uniann.sh -f ${seq} -p ${psauron_csv} -s ${sites} ${params.uniann_args}
-    ${back} > ${out}
+    # uniann.sh scales scores by the best donor and dies unless max(donor prob) * e > 1;
+    # sequences with no confident donor (e.g. mitochondria) get an empty annotation.
+    if awk -F'\t' 'NR>1 && \$4=="donor" && \$NF*2.718281828 > 1 {found=1} END {exit !found}' ${sites}; then
+        ${params.uniann_dir}/bin/uniann.sh -f ${seq} -p ${psauron_csv} -s ${sites} ${params.uniann_args}
+        ${back} > ${out}
+    else
+        echo "no donor with prob > 1/e in ${sites}; skipping UniAnn on ${id} ${strand}" >&2
+        printf '##gff-version 3\n' > ${out}
+    fi
     """
 }

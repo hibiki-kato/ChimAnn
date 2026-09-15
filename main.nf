@@ -34,7 +34,7 @@ workflow {
 
     // 3c. Site evaluator: train on EviAnn preliminary annotation, score both strands, split
     SITEVAL_TRAIN(genome, evidence_gff)
-    SITEVAL_SCORE(seqs, SITEVAL_TRAIN.out.model)
+    SITEVAL_SCORE(seqs, SITEVAL_TRAIN.out.model.collect())   // value channel: one model, every sequence
     SPLIT_SITES(seqs.join(SITEVAL_SCORE.out.sites))
     sites = SPLIT_SITES.out.plus.mix(SPLIT_SITES.out.minus)                 // (id, strand, tsv)
 

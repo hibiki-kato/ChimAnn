@@ -54,6 +54,7 @@ nextflow run ChimAnn -profile local_envs -params-file params.yaml \
 | `rnaseq` | EviAnn `-r` list: one sample per line, `R1.fq.gz R2.fq.gz fastq` | none |
 | `proteins` | related-species protein FASTA (EviAnn `-p`) | none → EviAnn downloads Swiss-Prot |
 | `eviann_args` | extra `eviann.sh` options | `''` |
+| `eviann_src` | directory of a newer `eviann.sh` + helper scripts, prepended to PATH (binaries still come from the env). INTEGRATE needs `--untrusted-cds`, which is in the [hibiki-kato/eviann](https://github.com/hibiki-kato/eviann) fork (branch `path-lookup`) but not yet in conda EviAnn 2.0.6 | none |
 | `outdir` | results directory | `results` |
 | `threads` | CPUs for EviAnn / INTEGRATE | 16 |
 | `uniann_dir` | UniAnn install (dir with `bin/uniann.sh`) | `uniann/` submodule |
