@@ -57,6 +57,8 @@ nextflow run ChimAnn -profile local_envs -params-file params.yaml \
 | `eviann_src` | directory of a newer `eviann.sh` + helper scripts, prepended to PATH (binaries still come from the env). INTEGRATE needs `--untrusted-cds`, which is in the [hibiki-kato/eviann](https://github.com/hibiki-kato/eviann) fork (branch `path-lookup`) but not yet in conda EviAnn 2.0.6 | none |
 | `outdir` | results directory | `results` |
 | `threads` | CPUs for EviAnn / INTEGRATE | 16 |
+| `min_seq_len` | sequences shorter than this skip PSAURON/sitescore/UniAnn (EviAnn still annotates them) | 100000 |
+| `psauron_chunk` | nt per psauron call; ~1 GB GPU per Mb | 4500000 |
 | `uniann_dir` | UniAnn install (dir with `bin/uniann.sh`) | `uniann/` submodule |
 | `uniann_args` | extra `uniann.sh` options | `-n` |
 | `sitescore_model` | evaluator plug-in (`sitescore models`) | `convmamba` |
