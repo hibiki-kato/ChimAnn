@@ -12,7 +12,6 @@ process SITE_TRAIN {
     input:
     path genome
     path annotation
-    val  gpu_barrier      // unused; forces ordering after other GPU tasks
 
     output:
     path 'model_dir', emit: model
@@ -35,7 +34,6 @@ process SITE_SCORE {
     input:
     tuple val(id), path(seq)
     path model_dir
-    val  gpu_barrier      // unused; forces ordering after other GPU tasks
 
     output:
     tuple val(id), path('sites.tsv'), emit: sites

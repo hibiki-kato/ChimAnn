@@ -81,10 +81,12 @@ Outputs under `outdir/`:
 Add `-with-report report.html -with-trace trace.txt` for per-task timing and
 memory. Rerun with `-resume` after a failure; completed stages are cached.
 
-**GPU**: PSAURON and sitescore share one GPU (`maxForks 1`). PSAURON needs
-~1 GB per Mb with `-a`, so sequences are scored in `psauron_chunk` pieces
-(default 4.5 Mb) and stitched; on CUDA OOM a task retries once on CPU.
-Training with the convmamba plug-in fits in ~6 GB at `batch_size 2`.
+**Compute**: PSAURON runs on CPU (4 threads per task, faster than on the GPU
+for this model) in parallel with EviAnn. The site scorer is the only GPU stage
+(`maxForks 1`); sitescore training auto-sizes its batch to the free VRAM
+(`auto_batch`, default on) and stops early on validation loss, so `patience`
+is the main knob for wall time (3 is enough when fine-tuning from a pretrained
+model: the first epoch is usually the best).
 
 ### Bring your own site scorer
 The site-scorer stage is isolated behind two shell commands; nothing else in the
@@ -114,8 +116,8 @@ Contract (also in `docs/contracts.md`):
   `prob` ∈ (0, 1]. UniAnn rescales by the best donor and needs some donor with
   `prob > 1/e`; only the `+` rows and the `-` rows converted by `bin/strand_tools.py`
   are consumed, so every candidate motif of the sequence should be present.
-- Runtime: both commands run in `site_scorer_env`, serialized on one GPU
-  (`maxForks 1`), retried once on failure. `bin/check_sites_tsv.py seq.fa sites.tsv`
+- Runtime: both commands run in `site_scorer_env`, one task at a time
+  (`maxForks 1`; nothing else in the pipeline uses the GPU), retried once on failure. `bin/check_sites_tsv.py seq.fa sites.tsv`
   validates the output and is run automatically after every score call; use it
   while developing.
 

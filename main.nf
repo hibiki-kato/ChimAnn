@@ -34,16 +34,15 @@ workflow {
 
     // 3c. Site scorer: train on EviAnn's preliminary annotation (unless a model_dir is
     //     given), score both strands of every sequence, split by strand.
-    //     gpu_done is a barrier only (one GPU): SITE_TRAIN and SITE_SCORE wait for every
-    //     PSAURON task, since maxForks is per process and cannot serialize across them.
-    gpu_done = PSAURON.out.csv.collect()
+    //     The site scorer is the only GPU user (PSAURON runs on CPU), so no cross-process
+    //     GPU serialization is needed; SITE_* are maxForks 1.
     if (params.site_model_dir) {
         site_model = Channel.value(file(params.site_model_dir, checkIfExists: true))
     } else {
-        SITE_TRAIN(genome, evidence_gff, gpu_done)
+        SITE_TRAIN(genome, evidence_gff)
         site_model = SITE_TRAIN.out.model.collect()          // value channel: one model, every sequence
     }
-    SITE_SCORE(seqs, site_model, gpu_done)
+    SITE_SCORE(seqs, site_model)
     SPLIT_SITES(seqs.join(SITE_SCORE.out.sites))
     sites = SPLIT_SITES.out.plus.mix(SPLIT_SITES.out.minus)                 // (id, strand, tsv)
 
