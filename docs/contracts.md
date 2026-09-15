@@ -31,6 +31,8 @@ package + one entry-point line, nothing in ChimAnn changes.
 
 - `siteval train --model M --genome genome.fa --annotation eviann.gff --out model_dir [--init pretrained_dir]`
   trains (or fine-tunes) on EviAnn's preliminary annotation.
+- `siteval train` ends with a Platt fit on the validation sequences
+  (`model_dir/calibration.json`); `siteval score` emits calibrated probabilities.
 - `siteval score --model-dir model_dir --fasta seq.fa > sites.tsv`
 
 ### sites.tsv (consumed by `uniann.sh -s`)
