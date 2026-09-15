@@ -3,4 +3,4 @@ rnaseq: /abs/path/rnaseq.list      # lines: /abs/path/R1.fastq /abs/path/R2.fast
 proteins: /abs/path/related_proteins.faa
 outdir: /abs/path/dev/ChimAnn/example/output
 threads: 16
-# siteval_init: /abs/path/dev/siteval/models/ssm-hsap-v8s5-with_chr1   # fine-tune from pretrained weights
+# sitescore_init: /abs/path/dev/sitescore/models/convmamba-human-grch38   # fine-tune from pretrained weights

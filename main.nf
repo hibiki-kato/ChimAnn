@@ -1,14 +1,14 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl = 2
 
-// ChimAnn: EviAnn (alignment + filtering) -> PSAURON + siteval (UniAnn inputs)
+// ChimAnn: EviAnn (alignment + filtering) -> PSAURON + sitescore (UniAnn inputs)
 //          -> UniAnn (ab initio) -> EviAnn again, taking UniAnn CDS as low-trust evidence
 
 include { EVIANN        } from './modules/eviann'
 include { SPLIT_GENOME  } from './modules/split_genome'
 include { PSAURON       } from './modules/psauron'
-include { SITEVAL_TRAIN } from './modules/siteval'
-include { SITEVAL_SCORE } from './modules/siteval'
+include { SITESCORE_TRAIN } from './modules/sitescore'
+include { SITESCORE_SCORE } from './modules/sitescore'
 include { REVCOMP       } from './modules/uniann'
 include { SPLIT_SITES   } from './modules/uniann'
 include { UNIANN        } from './modules/uniann'
@@ -33,9 +33,9 @@ workflow {
     PSAURON(stranded)
 
     // 3c. Site evaluator: train on EviAnn preliminary annotation, score both strands, split
-    SITEVAL_TRAIN(genome, evidence_gff)
-    SITEVAL_SCORE(seqs, SITEVAL_TRAIN.out.model.collect())   // value channel: one model, every sequence
-    SPLIT_SITES(seqs.join(SITEVAL_SCORE.out.sites))
+    SITESCORE_TRAIN(genome, evidence_gff)
+    SITESCORE_SCORE(seqs, SITESCORE_TRAIN.out.model.collect())   // value channel: one model, every sequence
+    SPLIT_SITES(seqs.join(SITESCORE_SCORE.out.sites))
     sites = SPLIT_SITES.out.plus.mix(SPLIT_SITES.out.minus)                 // (id, strand, tsv)
 
     // 4. Ab initio prediction (UniAnn), one run per sequence and strand

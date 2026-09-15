@@ -5,9 +5,9 @@ the formats so components can be swapped independently.
 
 ```
 genome.fa ──> EVIANN ──> <genome>.pseudo_label.gff ──┐
-    │                                                ├─> SITEVAL_TRAIN ─> model_dir
+    │                                                ├─> SITESCORE_TRAIN ─> model_dir
     ├─> SPLIT_GENOME ─> <seq>.fa ─┬─> PSAURON ─> psauron_score.csv ─┐
-    │                             ├─> SITEVAL_SCORE ─> sites.tsv ───┼─> UNIANN ─> <seq>.fa.uniann.gff
+    │                             ├─> SITESCORE_SCORE ─> sites.tsv ───┼─> UNIANN ─> <seq>.fa.uniann.gff
     │                             └─────────────────────────────────┘        │
     └─> INTEGRATE = eviann.sh -c uniann.gff --untrusted-cds ─> chimann.gff <─┘
 ```
@@ -23,17 +23,17 @@ genome.fa ──> EVIANN ──> <genome>.pseudo_label.gff ──┐
   per-frame per-base probability columns 10–15 of `psauron_score.csv`).
 - Input: one sequence per FASTA.
 
-## siteval (`siteval/` submodule)
-[hibiki-kato/siteval](https://github.com/hibiki-kato/siteval): one `SiteModel`
+## sitescore (`sitescore/` submodule)
+[hibiki-kato/sitescore](https://github.com/hibiki-kato/sitescore): one `SiteModel`
 interface (`train` / `load` / `score`), models registered as plug-ins
-(`siteval models`). SSM is the first plug-in; LLM or other models add a
+(`sitescore models`). convmamba is the first plug-in; LLM or other models add a
 package + one entry-point line, nothing in ChimAnn changes.
 
-- `siteval train --model M --genome genome.fa --annotation eviann.gff --out model_dir [--init pretrained_dir]`
+- `sitescore train --model M --genome genome.fa --annotation eviann.gff --out model_dir [--init pretrained_dir]`
   trains (or fine-tunes) on EviAnn's preliminary annotation.
-- `siteval train` ends with a Platt fit on the validation sequences
-  (`model_dir/calibration.json`); `siteval score` emits calibrated probabilities.
-- `siteval score --model-dir model_dir --fasta seq.fa > sites.tsv`
+- `sitescore train` ends with a Platt fit on the validation sequences
+  (`model_dir/calibration.json`); `sitescore score` emits calibrated probabilities.
+- `sitescore score --model-dir model_dir --fasta seq.fa > sites.tsv`
 
 ### sites.tsv (consumed by `uniann.sh -s`)
 Tab-separated, header row, 1-based coordinates, probabilities in (0, 1]:
@@ -48,7 +48,7 @@ rows only and takes the **last** column as the score. Reference file:
 
 ## UNIANN (per sequence **and strand**)
 UniAnn decodes the + strand only. `bin/strand_tools.py` makes the - strand a
-second + run: `revcomp` the sequence, `sites_rc` remaps siteval's `-` rows
+second + run: `revcomp` the sequence, `sites_rc` remaps sitescore's `-` rows
 (rc pos = L - pos + 1), PSAURON runs on the rc sequence, and `flip_gff` maps
 the result back (start' = L - end + 1, end' = L - start + 1, strand -).
 
