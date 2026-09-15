@@ -63,5 +63,8 @@ the result back (start' = L - end + 1, end' = L - start + 1, strand -).
 - Command: `eviann.sh <same args as EVIANN> -c uniann.gff --untrusted-cds`,
   run in a copy of the first pass's directory so alignment is not repeated
   (`-c` clears `merge.success`, so EviAnn resumes from the merge step).
+- Only UniAnn transcripts at loci without an evidence mRNA are passed
+  (`bin/novel_cds.py`); EviAnn emits external CDS only at such loci, and
+  passing overlapping ones displaces real protein evidence.
 - UniAnn CDS are *low-trust*: they pass EviAnn's splice-site filtering before
   the final merge. Output: `<genome>.pseudo_label.gff` → `chimann.gff`.

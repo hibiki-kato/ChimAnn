@@ -44,5 +44,5 @@ workflow {
     ab_initio_gff = UNIANN.out.gff.map { it[2] }.collectFile(name: 'uniann.gff', sort: true)
 
     // 5. Integration by EviAnn: UniAnn CDS enter as low-trust external evidence
-    INTEGRATE(genome, EVIANN.out.run_dir, ab_initio_gff)
+    INTEGRATE(genome, EVIANN.out.run_dir, evidence_gff, ab_initio_gff)
 }
