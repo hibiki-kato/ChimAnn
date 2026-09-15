@@ -1,0 +1,6 @@
+[submodule "uniann"]
+	path = uniann
+	url = https://github.com/hibiki-kato/UniAnn.git
+[submodule "sitescore"]
+	path = sitescore
+	url = https://github.com/hibiki-kato/sitescore.git

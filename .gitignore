@@ -1,19 +1,11 @@
-# macOS
+# OS / editors
 .DS_Store
-.AppleDouble
 ._*
-.Spotlight-V100
-.Trashes
-
-# Linux
 *~
-.directory
-
-# Editors / IDE
-.vscode/
-.idea/
 *.swp
 *.swo
+.vscode/
+.idea/
 
 # Python
 __pycache__/
@@ -23,6 +15,32 @@ __pycache__/
 venv/
 .env
 
-# Logs / temp
+# Nextflow
+.nextflow/
+.nextflow.log*
+work/
+report.html
+timeline.html
+trace.txt
+dag.*
+
+# Pipeline outputs and scratch
+results/
+example/output/
 *.log
 *.tmp
+
+# Large inputs (keep small reference files under example/input)
+**/rna/
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.bam
+*.bai
+*.ht2
+
+# Model weights and conda envs (siteval keeps its own models/ rule)
+*.pt
+*.pth
+envs/
