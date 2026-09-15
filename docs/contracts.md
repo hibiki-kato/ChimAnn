@@ -5,9 +5,9 @@ the formats so components can be swapped independently.
 
 ```
 genome.fa ──> EVIANN ──> <genome>.pseudo_label.gff ──┐
-    │                                                ├─> SITESCORE_TRAIN ─> model_dir
+    │                                                ├─> SITE_TRAIN ─> model_dir
     ├─> SPLIT_GENOME ─> <seq>.fa ─┬─> PSAURON ─> psauron_score.csv ─┐
-    │                             ├─> SITESCORE_SCORE ─> sites.tsv ───┼─> UNIANN ─> <seq>.fa.uniann.gff
+    │                             ├─> SITE_SCORE ─> sites.tsv ───┼─> UNIANN ─> <seq>.fa.uniann.gff
     │                             └─────────────────────────────────┘        │
     └─> INTEGRATE = eviann.sh -c uniann.gff --untrusted-cds ─> chimann.gff <─┘
 ```
@@ -23,7 +23,10 @@ genome.fa ──> EVIANN ──> <genome>.pseudo_label.gff ──┐
   per-frame per-base probability columns 10–15 of `psauron_score.csv`).
 - Input: one sequence per FASTA.
 
-## sitescore (`sitescore/` submodule)
+## Site scorer (`SITE_TRAIN` / `SITE_SCORE`; default = `sitescore/` submodule)
+Any tool can fill this stage through `params.site_train_cmd` / `params.site_score_cmd`
+(README "Bring your own site scorer"); `bin/check_sites_tsv.py` validates the output.
+
 [hibiki-kato/sitescore](https://github.com/hibiki-kato/sitescore): one `SiteModel`
 interface (`train` / `load` / `score`), models registered as plug-ins
 (`sitescore models`). convmamba is the first plug-in; LLM or other models add a

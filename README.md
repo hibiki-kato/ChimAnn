@@ -22,7 +22,7 @@ ChimAnn (Chimeric Annotation software, pronounced Kye-mahn) is a **Experimental*
 | --- | --- | --- |
 | Alignment + filtering | `modules/eviann.nf` | `eviann.sh` |
 | Coding-potential emissions | `modules/psauron.nf` | `psauron -a` (per sequence) |
-| Site scores (donor/acceptor/start/stop) | `modules/sitescore.nf` | `sitescore train/score` (model plug-in, convmamba by default) |
+| Site scores (donor/acceptor/start/stop) | `modules/site_scorer.nf` | any tool via `site_train_cmd` / `site_score_cmd`; default `sitescore` (convmamba) |
 | Ab initio prediction | `modules/uniann.nf` | `uniann.sh` per sequence and strand (- via reverse complement, `bin/strand_tools.py`) |
 | Integration | `modules/integrate.nf` | `eviann.sh -c uniann.gff --untrusted-cds` (resumes the EviAnn run) |
 
@@ -61,16 +61,20 @@ nextflow run ChimAnn -profile local_envs -params-file params.yaml \
 | `psauron_chunk` | nt per psauron call; ~1 GB GPU per Mb | 4500000 |
 | `uniann_dir` | UniAnn install (dir with `bin/uniann.sh`) | `uniann/` submodule |
 | `uniann_args` | extra `uniann.sh` options | `-n` |
-| `sitescore_model` | evaluator plug-in (`sitescore models`) | `convmamba` |
-| `sitescore_init` | pretrained `model_dir` to fine-tune from (recommended) | none → train from scratch |
-| `sitescore_hparams` | JSON forwarded to the model, e.g. `'{"epochs": 20, "batch_size": 2}'` | model defaults |
+| `site_train_cmd` | command template for training a site scorer (`{genome} {annotation} {model_dir}`); see below | `sitescore train …` |
+| `site_score_cmd` | command template for scoring one sequence (`{model_dir} {fasta}` → `sites.tsv` on stdout) | `sitescore score …` |
+| `site_model_dir` | ready-made model directory; skips training | none |
+| `site_scorer_env` | conda yml or env path for the scorer (`-profile conda`) | `sitescore/environment.yml` |
+| `sitescore_model` | sitescore only: plug-in (`sitescore models`) | `convmamba` |
+| `sitescore_init` | sitescore only: pretrained `model_dir` to fine-tune from (recommended) | none → train from scratch |
+| `sitescore_hparams` | sitescore only: JSON forwarded to the model, e.g. `'{"epochs": 20, "batch_size": 2}'` | model defaults |
 
 Outputs under `outdir/`:
 
 | path | content |
 | --- | --- |
 | `eviann/<genome>.pseudo_label.gff` | EviAnn evidence-based annotation (first pass) |
-| `sitescore/model_dir/` | fine-tuned evaluator (`model.pt`, `train_info.json`) |
+| `site_scorer/model_dir/` | trained site scorer (for sitescore: `model.pt`, `calibration.json`, `train_info.json`, `metrics.jsonl`) |
 | `uniann/<seq>.{plus,minus}.uniann.gff` | UniAnn ab initio predictions per sequence and strand |
 | `chimann.gff` | final annotation: EviAnn second pass with UniAnn CDS as low-trust evidence |
 
@@ -81,6 +85,42 @@ memory. Rerun with `-resume` after a failure; completed stages are cached.
 ~1 GB per Mb with `-a`, so sequences are scored in `psauron_chunk` pieces
 (default 4.5 Mb) and stitched; on CUDA OOM a task retries once on CPU.
 Training with the convmamba plug-in fits in ~6 GB at `batch_size 2`.
+
+### Bring your own site scorer
+The site-scorer stage is isolated behind two shell commands; nothing else in the
+pipeline knows what runs inside them. To replace sitescore with your own model,
+set in `params.yaml`:
+
+```yaml
+site_train_cmd: "my_scorer train --genome {genome} --gff {annotation} --out {model_dir}"   # optional
+site_score_cmd: "my_scorer score --model {model_dir} --fasta {fasta}"                    # required
+site_scorer_env: /abs/path/my_env.yml        # or an existing conda env path
+# site_model_dir: /abs/path/ready_model       # if there is nothing to train
+```
+
+Contract (also in `docs/contracts.md`):
+
+- **train** runs once per genome. Inputs: the genome FASTA (`{genome}`) and
+  EviAnn's first-pass annotation GFF3 (`{annotation}`, mRNA/exon/CDS with
+  `ID`/`Parent`) as the only labels. It must create the directory `{model_dir}`
+  (any content). If `site_model_dir` is set, train is skipped.
+- **score** runs once per sequence (both strands, sequences shorter than
+  `min_seq_len` excluded). Inputs: `{model_dir}` and a single-sequence FASTA
+  (`{fasta}`). It must print `sites.tsv` to stdout: tab-separated, header
+  `chrom pos strand type motif prob`, one row per candidate motif on both strands.
+  `pos` is the 1-based coordinate on the + strand of the motif's first base
+  (for `-` rows: `pos = L - i`, `i` = 0-based index of the motif in the reverse
+  complement); `type` ∈ donor (GT), acceptor (AG), start (ATG), stop (TAA/TAG/TGA);
+  `prob` ∈ (0, 1]. UniAnn rescales by the best donor and needs some donor with
+  `prob > 1/e`; only the `+` rows and the `-` rows converted by `bin/strand_tools.py`
+  are consumed, so every candidate motif of the sequence should be present.
+- Runtime: both commands run in `site_scorer_env`, serialized on one GPU
+  (`maxForks 1`), retried once on failure. `bin/check_sites_tsv.py seq.fa sites.tsv`
+  validates the output and is run automatically after every score call; use it
+  while developing.
+
+Reference implementation: the `sitescore` submodule (`sitescore train` /
+`sitescore score`), whose defaults are what the templates expand to when unset.
 
 ### Example
 `example/` holds *S. pombe* (genome, RNA-seq, reference GFF) and
