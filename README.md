@@ -85,9 +85,9 @@ memory. Rerun with `-resume` after a failure; completed stages are cached.
 **Compute**: PSAURON runs on CPU (4 threads per task, faster than on the GPU
 for this model) in parallel with EviAnn. The site scorer is the only GPU stage
 (`maxForks 1`); sitescore training auto-sizes its batch to the free VRAM
-(`auto_batch`, default on) and stops early on validation loss, so `patience`
-is the main knob for wall time (3 is enough when fine-tuning from a pretrained
-model: the first epoch is usually the best).
+(`auto_batch`, default on) and validates every quarter epoch, stopping after `patience` evaluations
+without improvement (3 is enough when fine-tuning from a pretrained model: the
+best checkpoint usually comes within the first epoch or two).
 
 ### Bring your own site scorer
 The site-scorer stage is isolated behind two shell commands; nothing else in the
