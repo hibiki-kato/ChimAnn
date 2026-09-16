@@ -19,6 +19,9 @@ process EVIANN {
     ${src}
     mkdir eviann_run && cd eviann_run
     eviann.sh -t ${task.cpus} -g ../${genome} ${rna} ${prot} ${params.eviann_args}
+    # eviann.sh can exit 0 after an internal tool failure; refuse an empty annotation
+    n=\$(awk -F'\\t' '\$3=="mRNA"' ${genome.name}.pseudo_label.gff | wc -l)
+    [ "\$n" -gt 0 ] || { echo "EviAnn produced no mRNA; see eviann_run/*.err" >&2; exit 1; }
     cp ${genome.name}.pseudo_label.gff ..
     """
 }

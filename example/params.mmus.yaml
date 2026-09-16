@@ -4,6 +4,7 @@ rnaseq: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/M
 proteins: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Mmus/protein/proteins_related.eviann.faa
 outdir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/chimann/Mmus
 threads: 24
+eviann_memory: '50 GB'                # miniprot on the 372 MB rodent proteome was OOM-killed at 38 GB with PSAURON alongside
 psauron_chunk: 3000000                # ~5 GB RAM per PSAURON task
 sitescore_init: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/sitescore/models/convmamba-human-grch38
 sitescore_hparams: '{"epochs": 3, "patience": 2, "num_workers": 4}'   # ~4 h per epoch on 2.7 Gb
