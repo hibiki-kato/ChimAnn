@@ -1,14 +1,14 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl = 2
 
-// ChimAnn: EviAnn (alignment + filtering) -> PSAURON + sitescore (UniAnn inputs)
+// ChimAnn: EviAnn (alignment + filtering) -> PSAURON + site scorer (UniAnn inputs)
 //          -> UniAnn (ab initio) -> EviAnn again, taking UniAnn CDS as low-trust evidence
 
 include { EVIANN        } from './modules/eviann'
 include { SPLIT_GENOME  } from './modules/split_genome'
 include { PSAURON       } from './modules/psauron'
-include { SITESCORE_TRAIN } from './modules/sitescore'
-include { SITESCORE_SCORE } from './modules/sitescore'
+include { SITE_TRAIN    } from './modules/site_scorer'
+include { SITE_SCORE    } from './modules/site_scorer'
 include { REVCOMP       } from './modules/uniann'
 include { SPLIT_SITES   } from './modules/uniann'
 include { UNIANN        } from './modules/uniann'
@@ -32,11 +32,18 @@ workflow {
     // 3b. PSAURON coding-potential emissions per strand
     PSAURON(stranded)
 
-    // 3c. Site evaluator: train on EviAnn preliminary annotation, score both strands, split
-    // PSAURON.out.csv.collect() is a barrier only: one GPU, so training waits for PSAURON
-    SITESCORE_TRAIN(genome, evidence_gff, PSAURON.out.csv.collect())
-    SITESCORE_SCORE(seqs, SITESCORE_TRAIN.out.model.collect())   // value channel: one model, every sequence
-    SPLIT_SITES(seqs.join(SITESCORE_SCORE.out.sites))
+    // 3c. Site scorer: train on EviAnn's preliminary annotation (unless a model_dir is
+    //     given), score both strands of every sequence, split by strand.
+    //     The site scorer is the only GPU user (PSAURON runs on CPU), so no cross-process
+    //     GPU serialization is needed; SITE_* are maxForks 1.
+    if (params.site_model_dir) {
+        site_model = Channel.value(file(params.site_model_dir, checkIfExists: true))
+    } else {
+        SITE_TRAIN(genome, evidence_gff)
+        site_model = SITE_TRAIN.out.model.collect()          // value channel: one model, every sequence
+    }
+    SITE_SCORE(seqs, site_model)
+    SPLIT_SITES(seqs.join(SITE_SCORE.out.sites))
     sites = SPLIT_SITES.out.plus.mix(SPLIT_SITES.out.minus)                 // (id, strand, tsv)
 
     // 4. Ab initio prediction (UniAnn), one run per sequence and strand

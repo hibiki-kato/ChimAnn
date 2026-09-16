@@ -4,5 +4,5 @@ proteins: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/ChimAnn/exa
 outdir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/ChimAnn/example/output/spom_soct
 threads: 24
 sitescore_init: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/sitescore/models/convmamba-human-grch38
-sitescore_hparams: '{"epochs": 20, "patience": 5, "batch_size": 2, "grad_accum": 8, "num_workers": 2}'
+sitescore_hparams: '{"epochs": 20, "patience": 3, "num_workers": 2}'
 eviann_src: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/eviann/src   # fork branch path-lookup (has --untrusted-cds)

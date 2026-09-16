@@ -5,9 +5,9 @@ the formats so components can be swapped independently.
 
 ```
 genome.fa ──> EVIANN ──> <genome>.pseudo_label.gff ──┐
-    │                                                ├─> SITESCORE_TRAIN ─> model_dir
+    │                                                ├─> SITE_TRAIN ─> model_dir
     ├─> SPLIT_GENOME ─> <seq>.fa ─┬─> PSAURON ─> psauron_score.csv ─┐
-    │                             ├─> SITESCORE_SCORE ─> sites.tsv ───┼─> UNIANN ─> <seq>.fa.uniann.gff
+    │                             ├─> SITE_SCORE ─> sites.tsv ───┼─> UNIANN ─> <seq>.fa.uniann.gff
     │                             └─────────────────────────────────┘        │
     └─> INTEGRATE = eviann.sh -c uniann.gff --untrusted-cds ─> chimann.gff <─┘
 ```
@@ -23,7 +23,10 @@ genome.fa ──> EVIANN ──> <genome>.pseudo_label.gff ──┐
   per-frame per-base probability columns 10–15 of `psauron_score.csv`).
 - Input: one sequence per FASTA.
 
-## sitescore (`sitescore/` submodule)
+## Site scorer (`SITE_TRAIN` / `SITE_SCORE`; default = `sitescore/` submodule)
+Any tool can fill this stage through `params.site_train_cmd` / `params.site_score_cmd`
+(README "Bring your own site scorer"); `bin/check_sites_tsv.py` validates the output.
+
 [hibiki-kato/sitescore](https://github.com/hibiki-kato/sitescore): one `SiteModel`
 interface (`train` / `load` / `score`), models registered as plug-ins
 (`sitescore models`). convmamba is the first plug-in; LLM or other models add a
@@ -46,7 +49,13 @@ X      7    +       donor     GT     3.43e-05
 rows only and takes the **last** column as the score. Reference file:
 `dev/UniAnn/data/dmel/chrX_sites.tsv`.
 
-## UNIANN (per sequence **and strand**)
+## UNIANN (per segment **and strand**)
+Sequences are cut into `segment_len` pieces overlapping by `segment_overlap`
+(`bin/segment_genome.py segment`, ids `<seqid>__<start>-<end>-<len>`); after UniAnn,
+`unsegment` restores coordinates and keeps a transcript only from the segment that
+owns its midpoint (interior boundaries at half the overlap) and only if it lies
+`--margin` (20 kb) inside the segment.
+
 UniAnn decodes the + strand only. `bin/strand_tools.py` makes the - strand a
 second + run: `revcomp` the sequence, `sites_rc` remaps sitescore's `-` rows
 (rc pos = L - pos + 1), PSAURON runs on the rc sequence, and `flip_gff` maps

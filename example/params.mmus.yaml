@@ -1,0 +1,11 @@
+# M. musculus, EviAnn-paper setup (6 SRA RNA-seq runs, related rodent + human proteomes)
+genome: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Mmus/ref/genome.fna
+rnaseq: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Mmus/rna/rna_fastq_manifest.eviann.txt
+proteins: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Mmus/protein/proteins_related.eviann.faa
+outdir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/chimann/Mmus
+threads: 24
+eviann_memory: '50 GB'                # miniprot on the 372 MB rodent proteome was OOM-killed at 38 GB with PSAURON alongside
+psauron_chunk: 3000000                # ~5 GB RAM per PSAURON task
+sitescore_init: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/sitescore/models/convmamba-human-grch38
+sitescore_hparams: '{"epochs": 3, "patience": 3, "num_workers": 4}'   # ~4.5 h per epoch on 2.7 Gb; validation every 1/4 epoch, stop after 3 without improvement
+eviann_src: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/eviann/src

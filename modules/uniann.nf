@@ -1,4 +1,5 @@
-// Ab initio gene prediction with UniAnn on one sequence and one strand.
+// Ab initio gene prediction with UniAnn on one segment and one strand; the output
+// is mapped back to genome coordinates (segment_genome.py unsegment).
 // UniAnn decodes the + strand only, so "-" runs on the reverse complement
 // (REVCOMP) with the sites table remapped, and the GFF is flipped back here.
 process REVCOMP {
@@ -46,6 +47,7 @@ process UNIANN {
     script:
     def out = "${id}.${strand == '+' ? 'plus' : 'minus'}.uniann.gff"
     def back = strand == '+' ? "cat ${seq}.uniann.gff" : "strand_tools.py flip_gff ${seq} ${seq}.uniann.gff | gffread"
+    back += " | segment_genome.py unsegment /dev/stdin --overlap ${params.segment_overlap}"
     """
     export OMP_NUM_THREADS=${task.cpus}
     # uniann.sh scales scores by the best donor and dies unless max(donor prob) * e > 1;

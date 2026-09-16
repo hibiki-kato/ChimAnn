@@ -25,7 +25,10 @@ process INTEGRATE {
     """
     ${src}
     novel_cds.py ${evidence_gff} ${ab_initio_gff} > novel.gff
-    cp -r ${run_dir}/ run && cd run
+    # -c only reruns merge and later, so the sorted BAMs (read by the completed
+    # assembly stages only) are left out of the copy; hard links are unsafe here
+    # because eviann.sh truncates existing files in place
+    mkdir run && find -L ${run_dir} -maxdepth 1 -type f ! -name "*.bam" -exec cp -t run {} + && cd run
     eviann.sh -t ${task.cpus} -g ../${genome} ${rna} ${prot} ${params.eviann_args} \\
         -c ../novel.gff --untrusted-cds
     cp ${genome.name}.pseudo_label.gff ../chimann.gff
