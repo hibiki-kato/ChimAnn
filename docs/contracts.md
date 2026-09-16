@@ -49,7 +49,13 @@ X      7    +       donor     GT     3.43e-05
 rows only and takes the **last** column as the score. Reference file:
 `dev/UniAnn/data/dmel/chrX_sites.tsv`.
 
-## UNIANN (per sequence **and strand**)
+## UNIANN (per segment **and strand**)
+Sequences are cut into `segment_len` pieces overlapping by `segment_overlap`
+(`bin/segment_genome.py segment`, ids `<seqid>__<start>-<end>-<len>`); after UniAnn,
+`unsegment` restores coordinates and keeps a transcript only from the segment that
+owns its midpoint (interior boundaries at half the overlap) and only if it lies
+`--margin` (20 kb) inside the segment.
+
 UniAnn decodes the + strand only. `bin/strand_tools.py` makes the - strand a
 second + run: `revcomp` the sequence, `sites_rc` remaps sitescore's `-` rows
 (rc pos = L - pos + 1), PSAURON runs on the rc sequence, and `flip_gff` maps

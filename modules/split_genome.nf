@@ -1,6 +1,9 @@
-// One FASTA per sequence; downstream tools (PSAURON, UniAnn) work per sequence.
-// Sequences shorter than params.min_seq_len skip the ab initio track (they are
-// still annotated by EviAnn): each one would cost a full psauron model load.
+// One FASTA per segment: sequences >= params.min_seq_len are cut into
+// params.segment_len pieces overlapping by params.segment_overlap
+// (bin/segment_genome.py). Downstream PSAURON / site scoring / UniAnn work per
+// segment (UniAnn needs ~0.6 GB RAM per Mb); UNIANN maps coordinates back and
+// keeps each transcript from the segment that owns its midpoint.
+// Shorter sequences skip the ab initio track (EviAnn still annotates them).
 process SPLIT_GENOME {
     input:
     path genome
@@ -10,12 +13,7 @@ process SPLIT_GENOME {
 
     script:
     """
-    mkdir seqs
-    awk '/^>/{f="seqs/"substr(\$1,2)".fa"} {print > f}' ${genome}
-    for f in seqs/*.fa; do
-        len=\$(grep -v '^>' \$f | tr -d '\\n' | wc -c)
-        [ "\$len" -lt ${params.min_seq_len} ] && rm \$f
-    done
-    ls seqs/*.fa >/dev/null
+    segment_genome.py segment ${genome} --size ${params.segment_len} --overlap ${params.segment_overlap} \\
+        --min-len ${params.min_seq_len} --outdir seqs
     """
 }

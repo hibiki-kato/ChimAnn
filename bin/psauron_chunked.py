@@ -14,11 +14,12 @@ preprocess_psauron_scores.pl reads forward frames only.
 """
 import argparse
 import csv
-import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+import numpy as np
 
 csv.field_size_limit(sys.maxsize)   # all_prob cells run to millions of characters
 STOPS = {"TAA", "TAG", "TGA"}
@@ -53,17 +54,14 @@ def run_psauron(seq, workdir, tag):
     return [row[c].split(";") if row[c] else [] for c in COLS[9:12]]
 
 
-def codon_probs(seq, frame, probs):
-    """{codon start (0-based, absolute within seq): prob} for one forward frame."""
-    out, it = {}, iter(probs)
-    for p in range(frame, len(seq) - 2, 3):
-        if seq[p:p + 3] in STOPS:
-            continue
-        try:
-            out[p] = next(it)
-        except StopIteration:
-            break
-    return out
+STOP_CODES = {"TAA", "TAG", "TGA"}
+
+
+def stop_mask(seq_arr, starts):
+    """True where the codon starting at each position is a stop."""
+    a, b, c = seq_arr[starts], seq_arr[starts + 1], seq_arr[starts + 2]
+    t, g = ord("T"), ord("G")
+    return (a == t) & (((b == ord("A")) & ((c == ord("A")) | (c == g))) | ((b == g) & (c == ord("A"))))
 
 
 def main():
@@ -78,17 +76,20 @@ def main():
     cid, seq = read_one(a.fasta)
     L = len(seq)
 
-    merged = [dict(), dict(), dict()]           # per frame: codon start -> prob
+    seq_arr = np.frombuffer(seq.encode("ascii"), dtype=np.uint8)
+    prob = np.full(L, np.nan, dtype=np.float32)      # indexed by absolute codon start; first chunk wins
     with tempfile.TemporaryDirectory(prefix="psauron_") as tmp:
         start = 0
         while start < L:
             end = min(start + chunk, L)
             probs = run_psauron(seq[start:end], tmp, f"c{start}")
             for f in range(3):
-                # local frame f corresponds to absolute frame (start + f) % 3
-                for p, v in codon_probs(seq[start:end], f, probs[f]).items():
-                    ap_ = start + p
-                    merged[ap_ % 3].setdefault(ap_, v)    # first (upstream) chunk wins in overlaps
+                starts = np.arange(start + f, end - 2, 3)
+                keep = ~stop_mask(seq_arr, starts)
+                vals = np.asarray(probs[f][: int(keep.sum())], dtype=np.float32)
+                idx = starts[keep][: len(vals)]
+                unset = np.isnan(prob[idx])
+                prob[idx[unset]] = vals[unset]
             if end == L:
                 break
             start = end - overlap
@@ -96,8 +97,11 @@ def main():
 
     cols = []
     for f in range(3):
-        m = merged[f]
-        cols.append(";".join(m[p] for p in range(f, L - 2, 3) if seq[p:p + 3] not in STOPS and p in m))
+        starts = np.arange(f, L - 2, 3)
+        starts = starts[~stop_mask(seq_arr, starts)]
+        vals = prob[starts]
+        vals = vals[~np.isnan(vals)]
+        cols.append(";".join(np.char.mod("%g", vals)))
     with open(a.out, "w", newline="") as fh:
         fh.write(f"psauron_chunked.py {a.fasta} --chunk {chunk} --overlap {overlap}\n")
         fh.write("psauron score: NA\n")

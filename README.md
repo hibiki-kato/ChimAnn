@@ -58,6 +58,7 @@ nextflow run ChimAnn -profile local_envs -params-file params.yaml \
 | `outdir` | results directory | `results` |
 | `threads` | CPUs for EviAnn / INTEGRATE | 16 |
 | `min_seq_len` | sequences shorter than this skip PSAURON/sitescore/UniAnn (EviAnn still annotates them) | 100000 |
+| `segment_len` / `segment_overlap` | the ab initio track runs on overlapping segments (UniAnn needs ~0.6 GB RAM per Mb); each transcript is kept from the segment owning its midpoint. On fly 3R, 12 Mb segments reproduce 95% of whole-chromosome transcripts | 25 Mb / 4 Mb |
 | `psauron_chunk` | nt per psauron call; ~1 GB GPU per Mb | 4500000 |
 | `uniann_dir` | UniAnn install (dir with `bin/uniann.sh`) | `uniann/` submodule |
 | `uniann_args` | extra `uniann.sh` options | `-n` |
