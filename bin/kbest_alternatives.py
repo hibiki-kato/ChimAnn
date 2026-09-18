@@ -8,8 +8,10 @@ main UniAnn output), drops structures identical to one already emitted at the
 locus (paths differing only in a neighbouring gene repeat the same transcript),
 applies uniann.sh's MIN_CDS rule (1-2 exon transcripts with CDS <= min-cds are
 dropped) and prefixes IDs so they are unique across segments and strands.
-Output: transcript/exon/CDS rows in the layout of <fasta>.uniann.gff, no header
-(meant to be appended to it).
+Each transcript carries kbest_rank=K and kbest_delta=<path score minus the k1
+path score at the locus> (<= 0) so INTEGRATE can calibrate a cutoff
+(bin/kbest_calibrate.py). Output: transcript/exon/CDS rows in the layout of
+<fasta>.uniann.gff, no header (meant to be appended to it).
 """
 import argparse
 import sys
@@ -22,6 +24,7 @@ a = ap.parse_args()
 
 tx = {}          # transcript id -> [transcript row, exon rows, cds rows]
 order = []
+path_score = {}  # (locus, k) -> path score (all genes of a path share it)
 for line in open(a.gff):
     if line.startswith("#") or not line.strip():
         continue
@@ -32,6 +35,8 @@ for line in open(a.gff):
     if p[2] == "transcript":
         tx[attrs["ID"]] = [p, [], []]
         order.append(attrs["ID"])
+        locus, k = attrs["ID"].split(".")[:2]
+        path_score[(locus, int(k[1:]))] = float(p[5])
     else:
         tx[attrs["Parent"]][1 if p[2] == "exon" else 2].append(p)
 
@@ -49,8 +54,10 @@ for tid in order:
     if len(exons) <= 2 and cds_len <= a.min_cds:
         short += 1; continue
     new_id = f"{a.prefix}.{tid}"
+    k = int(tid.split(".")[1][1:])
+    delta = path_score[(locus, k)] - path_score[(locus, 1)]
     t[5] = "."                             # path scores have 13+ digits and overflow gffread's score buffer
-    t[8] = f"ID={new_id}"
+    t[8] = f"ID={new_id};kbest_rank={k};kbest_delta={delta:.2f}"
     print("\t".join(t))
     for rows in (exons, cds):
         for r in rows:
