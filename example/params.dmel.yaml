@@ -6,4 +6,3 @@ outdir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/chimann/Dmel
 threads: 28
 sitescore_init: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/sitescore/models/convmamba-human-grch38
 sitescore_hparams: '{"epochs": 20, "patience": 3, "num_workers": 4}'
-eviann_src: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/eviann/src

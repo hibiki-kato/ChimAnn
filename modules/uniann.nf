@@ -2,6 +2,10 @@
 // is mapped back to genome coordinates (segment_genome.py unsegment).
 // UniAnn decodes the + strand only, so "-" runs on the reverse complement
 // (REVCOMP) with the sites table remapped, and the GFF is flipped back here.
+// With params.uniann_kbest = K > 0, UniAnn's gene-local k-best decoder also
+// emits up to K-1 alternative transcripts per predicted gene
+// (bin/kbest_alternatives.py), appended to the same GFF; downstream they are
+// filtered like every other ab initio transcript (novel_cds.py, EviAnn -c).
 process REVCOMP {
     tag "$id"
 
@@ -48,12 +52,16 @@ process UNIANN {
     def out = "${id}.${strand == '+' ? 'plus' : 'minus'}.uniann.gff"
     def back = strand == '+' ? "cat ${seq}.uniann.gff" : "strand_tools.py flip_gff ${seq} ${seq}.uniann.gff | gffread"
     back += " | segment_genome.py unsegment /dev/stdin --overlap ${params.segment_overlap}"
+    def K = params.uniann_kbest as int
+    def kbest = K > 0 ? "--local-k-best ${K} --local-k-output ${seq}.kbest.gff" : ''
+    def alts = K > 0 ? "kbest_alternatives.py ${seq}.kbest.gff --prefix ${seq}.kbest >> ${seq}.uniann.gff" : ''
     """
     export OMP_NUM_THREADS=${task.cpus}
     # uniann.sh scales scores by the best donor and dies unless max(donor prob) * e > 1;
     # sequences with no confident donor (e.g. mitochondria) get an empty annotation.
     if awk -F'\t' 'NR>1 && \$4=="donor" && \$NF*2.718281828 > 1 {found=1} END {exit !found}' ${sites}; then
-        ${params.uniann_dir}/bin/uniann.sh -f ${seq} -p ${psauron_csv} -s ${sites} ${params.uniann_args}
+        ${params.uniann_dir}/bin/uniann.sh -f ${seq} -p ${psauron_csv} -s ${sites} ${params.uniann_args} ${kbest}
+        ${alts}
         ${back} > ${out}
     else
         echo "no donor with prob > 1/e in ${sites}; skipping UniAnn on ${id} ${strand}" >&2
