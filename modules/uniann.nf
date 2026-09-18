@@ -50,7 +50,7 @@ process UNIANN {
 
     script:
     def out = "${id}.${strand == '+' ? 'plus' : 'minus'}.uniann.gff"
-    def back = strand == '+' ? "cat ${seq}.uniann.gff" : "strand_tools.py flip_gff ${seq} ${seq}.uniann.gff | gffread"
+    def back = strand == '+' ? "cat ${seq}.uniann.gff" : "strand_tools.py flip_gff ${seq} ${seq}.uniann.gff | gffread -F"
     back += " | segment_genome.py unsegment /dev/stdin --overlap ${params.segment_overlap}"
     def K = params.uniann_kbest as int
     def kbest = K > 0 ? "--local-k-best ${K} --local-k-output ${seq}.kbest.gff" : ''

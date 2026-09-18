@@ -24,7 +24,7 @@ ChimAnn (Chimeric Annotation software, pronounced Kye-mahn) is a **Experimental*
 | Coding-potential emissions | `modules/psauron.nf` | `psauron -a` (per sequence) |
 | Site scores (donor/acceptor/start/stop) | `modules/site_scorer.nf` | any tool via `site_train_cmd` / `site_score_cmd`; default `sitescore` (convmamba) |
 | Ab initio prediction | `modules/uniann.nf` | `uniann.sh` per sequence and strand (- via reverse complement, `bin/strand_tools.py`); optional gene-local k-best alternatives (`uniann_kbest`, `bin/kbest_alternatives.py`) |
-| Integration | `modules/integrate.nf` | `eviann.sh -c uniann.gff --untrusted-cds` (resumes the EviAnn run) |
+| Integration | `modules/integrate.nf` | `eviann.sh -c uniann.gff --untrusted-cds` (resumes the EviAnn run); k-best alternatives pre-filtered by `bin/kbest_calibrate.py` |
 
 ### Install
 Nextflow is the launcher; each stage's tools come from conda environments.
@@ -65,7 +65,9 @@ nextflow run ChimAnn -profile local_envs -params-file params.yaml \
 | `psauron_chunk` | nt per psauron call; ~1 GB GPU per Mb | 4500000 |
 | `uniann_dir` | UniAnn install (dir with `bin/uniann.sh`) | `uniann/` submodule |
 | `uniann_args` | extra `uniann.sh` options | `-n` |
-| `uniann_kbest` | K > 0 adds UniAnn's gene-local k-best decoder: up to K-1 alternative transcripts per predicted gene (`.kbest.locusN.kM.gJ.t1` IDs) join the ab initio set. ~+0.4 GB RAM per Mb and single-threaded (D. melanogaster X: 6 min for K=5), so UNIANN runs 2-wide | 0 |
+| `uniann_kbest` | K > 0 adds UniAnn's gene-local k-best decoder: up to K-1 alternative transcripts per predicted gene (`.kbest.locusN.kM.gJ.t1` IDs, attributes `kbest_rank`, `kbest_delta` = path score minus the Viterbi path score) join the ab initio set. ~+0.4 GB RAM per Mb and single-threaded (D. melanogaster X: 6 min for K=5), so UNIANN runs 2-wide | 0 |
+| `kbest_delta_fraction` | INTEGRATE keeps a k-best alternative only if its score drop is at most this fraction of the largest drop among alternatives that reproduce one of EviAnn's own alternative isoforms (`bin/kbest_calibrate.py`); no confirmed isoforms → all alternatives dropped | 0.5 |
+| `integrate_novel_only` | pass only ab initio transcripts at loci without evidence mRNA to EviAnn `-c` (`bin/novel_cds.py`). Needed with EviAnn before 2c1e1f9, which let external CDS displace protein evidence; the submodule keeps evidence CDS itself | false |
 | `site_train_cmd` | command template for training a site scorer (`{genome} {annotation} {model_dir}`); see below | `sitescore train …` |
 | `site_score_cmd` | command template for scoring one sequence (`{model_dir} {fasta}` → `sites.tsv` on stdout) | `sitescore score …` |
 | `site_model_dir` | ready-made model directory; skips training | none |
