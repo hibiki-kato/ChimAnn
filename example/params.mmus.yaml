@@ -8,4 +8,3 @@ eviann_memory: '50 GB'                # miniprot on the 372 MB rodent proteome w
 psauron_chunk: 3000000                # ~5 GB RAM per PSAURON task
 sitescore_init: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/sitescore/models/convmamba-human-grch38
 sitescore_hparams: '{"epochs": 3, "patience": 3, "num_workers": 4}'   # ~4.5 h per epoch on 2.7 Gb; validation every 1/4 epoch, stop after 3 without improvement
-eviann_src: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/eviann/src

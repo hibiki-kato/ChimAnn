@@ -20,10 +20,10 @@ ChimAnn (Chimeric Annotation software, pronounced Kye-mahn) is a **Experimental*
 
 | Stage | Module | Tool |
 | --- | --- | --- |
-| Alignment + filtering | `modules/eviann.nf` | `eviann.sh` |
+| Alignment + filtering | `modules/eviann.nf` | `eviann.sh --splice-model cnn` (eviann submodule: CNN donor/acceptor splice-site model) |
 | Coding-potential emissions | `modules/psauron.nf` | `psauron -a` (per sequence) |
 | Site scores (donor/acceptor/start/stop) | `modules/site_scorer.nf` | any tool via `site_train_cmd` / `site_score_cmd`; default `sitescore` (convmamba) |
-| Ab initio prediction | `modules/uniann.nf` | `uniann.sh` per sequence and strand (- via reverse complement, `bin/strand_tools.py`) |
+| Ab initio prediction | `modules/uniann.nf` | `uniann.sh` per sequence and strand (- via reverse complement, `bin/strand_tools.py`); optional gene-local k-best alternatives (`uniann_kbest`, `bin/kbest_alternatives.py`) |
 | Integration | `modules/integrate.nf` | `eviann.sh -c uniann.gff --untrusted-cds` (resumes the EviAnn run) |
 
 ### Install
@@ -32,13 +32,15 @@ Nextflow is the launcher; each stage's tools come from conda environments.
 conda install -c bioconda nextflow                 # launcher, once
 git clone --recurse-submodules https://github.com/hibiki-kato/ChimAnn.git
 cd ChimAnn
-(cd uniann && ./install.sh)                        # builds uniann/bin
+(cd uniann && ./install.sh)                        # builds uniann/bin (fork branch feature/local-k-best)
+# eviann/ is the hibiki-kato/eviann fork (branch feature/cnn-splice): eviann.sh and its
+# helper scripts run from there; the bundled binaries still come from the conda env
 ```
 Two ways to supply the stage environments:
 
 | profile | what it does |
 | --- | --- |
-| `-profile conda` | Nextflow builds `environment.yml` (EviAnn, gffcompare/gffread, PSAURON) and `sitescore/environment.yml` (PyTorch + mamba-ssm, CUDA) |
+| `-profile conda` | Nextflow builds `environment.yml` (EviAnn, gffcompare/gffread, PyTorch for the CNN splice model, PSAURON) and `sitescore/environment.yml` (PyTorch + mamba-ssm, CUDA) |
 | `-profile local_envs` | uses existing envs by path (edit `nextflow.config`); PSAURON and sitescore need `pip install psauron -e sitescore` in the GPU env |
 
 ### Usage
@@ -53,8 +55,9 @@ nextflow run ChimAnn -profile local_envs -params-file params.yaml \
 | `genome` | target genome FASTA | required |
 | `rnaseq` | EviAnn `-r` list: one sample per line, `R1.fq.gz R2.fq.gz fastq` | none |
 | `proteins` | related-species protein FASTA (EviAnn `-p`) | none → EviAnn downloads Swiss-Prot |
-| `eviann_args` | extra `eviann.sh` options | `''` |
-| `eviann_src` | directory of a newer `eviann.sh` + helper scripts, prepended to PATH (binaries still come from the env). INTEGRATE needs `--untrusted-cds`, which is in the [hibiki-kato/eviann](https://github.com/hibiki-kato/eviann) fork (branch `path-lookup`) but not yet in conda EviAnn 2.0.6 | none |
+| `eviann_args` | extra `eviann.sh` options; `--splice-model markov` restores EviAnn's Markov chain splice filter | `--no-snap --splice-model cnn` |
+| `eviann_src` | directory of `eviann.sh` + helper scripts, prepended to PATH (binaries still come from the env). The default is the `eviann/` submodule ([hibiki-kato/eviann](https://github.com/hibiki-kato/eviann) branch `feature/cnn-splice`): it carries `--untrusted-cds` (needed by INTEGRATE), `--no-snap` and `--splice-model cnn`, none of which are in conda EviAnn 2.0.6 | `eviann/src` |
+| `eviann_resume_dir` | a finished EviAnn run directory to seed EVIANN from: read/protein alignments are copied, the merge stage reruns with the current `eviann_args` | none |
 | `outdir` | results directory | `results` |
 | `threads` | CPUs for EviAnn / INTEGRATE | 16 |
 | `min_seq_len` | sequences shorter than this skip PSAURON/sitescore/UniAnn (EviAnn still annotates them) | 100000 |
@@ -62,6 +65,7 @@ nextflow run ChimAnn -profile local_envs -params-file params.yaml \
 | `psauron_chunk` | nt per psauron call; ~1 GB GPU per Mb | 4500000 |
 | `uniann_dir` | UniAnn install (dir with `bin/uniann.sh`) | `uniann/` submodule |
 | `uniann_args` | extra `uniann.sh` options | `-n` |
+| `uniann_kbest` | K > 0 adds UniAnn's gene-local k-best decoder: up to K-1 alternative transcripts per predicted gene (`.kbest.locusN.kM.gJ.t1` IDs) join the ab initio set. ~+0.4 GB RAM per Mb and single-threaded (D. melanogaster X: 6 min for K=5), so UNIANN runs 2-wide | 0 |
 | `site_train_cmd` | command template for training a site scorer (`{genome} {annotation} {model_dir}`); see below | `sitescore train …` |
 | `site_score_cmd` | command template for scoring one sequence (`{model_dir} {fasta}` → `sites.tsv` on stdout) | `sitescore score …` |
 | `site_model_dir` | ready-made model directory; skips training | none |
@@ -74,7 +78,7 @@ Outputs under `outdir/`:
 
 | path | content |
 | --- | --- |
-| `eviann/<genome>.pseudo_label.gff` | EviAnn evidence-based annotation (first pass) |
+| `eviann/<genome>.pseudo_label.gff` | EviAnn evidence-based annotation (first pass, CNN splice filter) |
 | `site_scorer/model_dir/` | trained site scorer (for sitescore: `model.pt`, `calibration.json`, `train_info.json`, `metrics.jsonl`) |
 | `uniann/<seq>.{plus,minus}.uniann.gff` | UniAnn ab initio predictions per sequence and strand |
 | `chimann.gff` | final annotation: EviAnn second pass with UniAnn CDS as low-trust evidence |
