@@ -46,3 +46,27 @@ process SITE_SCORE {
     check_sites_tsv.py ${seq} sites.tsv
     """
 }
+
+// Optional prior from the protein alignments of the EviAnn run (bin/site_prior.py):
+// start/stop probabilities at the CDS ends of miniprot alignments and/or EviAnn's
+// best_unused_proteins are raised to params.site_prior_prob before UniAnn.
+process SITE_PRIOR {
+    tag "$id"
+
+    input:
+    tuple val(id), path(seq), path(sites)
+    path run_dir
+
+    output:
+    tuple val(id), path('sites.prior.tsv'), emit: sites
+
+    script:
+    def g = params.genome.tokenize('/').last()
+    def gffs = []
+    if (params.site_prior in ['palign', 'both']) gffs << "--gff ${run_dir}/${g}.palign.fixed.gff --min-identity ${params.site_prior_min_identity}"
+    if (params.site_prior in ['unused', 'both']) gffs << "--gff ${run_dir}/${g}.best_unused_proteins.gff"
+    """
+    site_prior.py ${seq} ${sites} ${gffs.join(' ')} --prob ${params.site_prior_prob} > sites.prior.tsv
+    check_sites_tsv.py ${seq} sites.prior.tsv
+    """
+}

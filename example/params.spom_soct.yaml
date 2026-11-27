@@ -3,5 +3,7 @@ rnaseq: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/ChimAnn/examp
 proteins: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/ChimAnn/example/input/S_octosporus/protein.faa
 outdir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/ChimAnn/example/output/spom_soct
 threads: 24
-sitescore_init: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/dev/sitescore/models/convmamba-human-grch38
-sitescore_hparams: '{"epochs": 20, "patience": 3, "num_workers": 2}'
+cnn_mamba_dir: /home/hibiki/DNA/dev/ChimAnn/cnn-mamba
+cnn_python: /home/hibiki/miniforge3/envs/altann-spom/bin/python
+cnn_validation_chroms: [NC_003423.3]
+cnn_test_chroms: [NC_003421.2]

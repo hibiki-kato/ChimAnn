@@ -3,135 +3,113 @@
   <img src="docs/assets/title.svg" width="50%" align="middle" />
 </p>
 
-ChimAnn (Chimeric Annotation software, pronounced Kye-mahn) is a **Experimental** DNA annotation software that combines evidence-based and ab initio methods.
-
-### Software Architecture
-<p align="center">
-  <img src="docs/assets/pipeline_overall.drawio.svg" width="50%" align="middle" hspace="20" />
-</p>
-
-- Alignment is performed using [minimap2](https://github.com/lh3/minimap2), [HISAT2](https://daehwankimlab.github.io/hisat2/), [StringTie](https://github.com/Transcriptome-Analysis-Tools/StringTie), and [miniprot](https://github.com/lh3/miniprot)
-- Filtering is performed using [EviAnn](https://github.com/alekseyzimin/EviAnn).
-- Ab initio gene prediction is performed using [UniAnn](https://github.com/hibiki-kato/UniAnn), fed by [PSAURON](https://github.com/salzberg-lab/PSAURON) emissions and [sitescore](https://github.com/hibiki-kato/sitescore) site scores.
-- Integration is performed by EviAnn: UniAnn's CDS are fed back as low-trust external evidence (`-c … --untrusted-cds`).
+ChimAnn (Chimeric Annotation software, pronounced Kye-mahn) is experimental genome annotation software combining evidence-based models with UniAnn best paths and AltAnn alternatives.
 
 ### Pipeline
-`main.nf` (Nextflow DSL2) runs the stages in order; every boundary is a file whose format is pinned in [docs/contracts.md](docs/contracts.md).
 
-| Stage | Module | Tool |
-| --- | --- | --- |
-| Alignment + filtering | `modules/eviann.nf` | `eviann.sh --splice-model cnn` (eviann submodule: CNN donor/acceptor splice-site model) |
-| Coding-potential emissions | `modules/psauron.nf` | `psauron -a` (per sequence) |
-| Site scores (donor/acceptor/start/stop) | `modules/site_scorer.nf` | any tool via `site_train_cmd` / `site_score_cmd`; default `sitescore` (convmamba) |
-| Ab initio prediction | `modules/uniann.nf` | `uniann.sh` per sequence and strand (- via reverse complement, `bin/strand_tools.py`); optional gene-local k-best alternatives (`uniann_kbest`, `bin/kbest_alternatives.py`) |
-| Integration | `modules/integrate.nf` | `eviann.sh -c uniann.gff --untrusted-cds` (resumes the EviAnn run); k-best alternatives pre-filtered by `bin/kbest_calibrate.py` |
-
-### Install
-Nextflow is the launcher; each stage's tools come from conda environments.
-```bash
-conda install -c bioconda nextflow                 # launcher, once
-git clone --recurse-submodules https://github.com/hibiki-kato/ChimAnn.git
-cd ChimAnn
-(cd uniann && ./install.sh)                        # builds uniann/bin (fork branch feature/local-k-best)
-# eviann/ is the hibiki-kato/eviann fork (branch feature/cnn-splice): eviann.sh and its
-# helper scripts run from there; the bundled binaries still come from the conda env
+```text
+EviAnn evidence annotation
+    -> CNN-Mamba training on EviAnn pseudo-labels, or supplied checkpoint
+    -> coding-frame and site probabilities on both oriented strands
+    -> UniAnn emissions, transitions and best-path traceback
+    -> AltAnn alternatives using the same processed scores
+    -> upstream EviAnn external-CDS merge and final annotation
 ```
-Two ways to supply the stage environments:
 
-| profile | what it does |
+`main.nf` is a Nextflow DSL2 workflow. [Stage contracts](docs/contracts.md) describe score formats and coordinate transformations.
+
+| Stage | Purpose |
 | --- | --- |
-| `-profile conda` | Nextflow builds `environment.yml` (EviAnn, gffcompare/gffread, PyTorch for the CNN splice model, PSAURON) and `sitescore/environment.yml` (PyTorch + mamba-ssm, CUDA) |
-| `-profile local_envs` | uses existing envs by path (edit `nextflow.config`); PSAURON and sitescore need `pip install psauron -e sitescore` in the GPU env |
+| `EVIANN` | Assemble RNA evidence, align related-species proteins and produce the initial annotation. Upstream EviAnn uses its normal Markov splice filtering and annotation rules. |
+| `CNN_MODEL` | Train CNN-Mamba using only EviAnn pseudo-labels; `cnn_checkpoint` reuses a supplied model. |
+| `CNN_SCORE` | Score each segment and its reverse complement with the same model, exporting joint coding-frame and donor/acceptor/start/stop probabilities. |
+| `UNIANN` | Convert the probabilities once, run native Viterbi and retain the processed scores and traceback for AltAnn. |
+| `ALTANN` | Generate existing K-best alternatives; check reference CDS chains against UniAnn before merging candidates. |
+| `INTEGRATE` | Rerun upstream EviAnn with `-c …`, retaining its normal external-CDS integration rules. |
+
+### Installation
+
+Nextflow and a Java runtime launch the workflow. UniAnn needs a C++ compiler; AltAnn also needs CMake.
+
+```bash
+git clone https://github.com/hibiki-kato/ChimAnn.git
+cd ChimAnn
+git submodule update --init uniann eviann altann cnn-mamba
+conda env create -f environment.yml
+conda activate chimann
+python3 bin/install_eviann.py --source eviann --outdir eviann/bin
+(cd uniann && ./install.sh)
+cmake -S altann -B altann/build -DCMAKE_BUILD_TYPE=Release
+cmake --build altann/build --parallel 16
+```
+
+The annotation submodules use upstream [EviAnn](https://github.com/alekseyzimin/eviann), upstream [UniAnn](https://github.com/alekseyzimin/UniAnn), and [AltAnn](https://github.com/hibiki-kato/AltAnn). `install_eviann.py` creates a local `eviann/bin` runtime from the unmodified upstream source and resolves its required tools from the annotation environment on `PATH`; `eviann_src` points to that installed runtime. It does not patch upstream files. After updating dependencies with `git submodule update --init --remote uniann eviann altann cnn-mamba`, repeat the installation/build commands before running again. `environment.yml` supplies annotation tools, including SNAP and TransDecoder dependencies. Use `-profile conda` to create the annotation environment, or `-profile local_envs --annotation_env /abs/path/annotation_env` to reuse one.
+
+CNN-Mamba is the `cnn-mamba` submodule, a clean upstream checkout pinned to `809f743`, selected by `cnn_mamba_dir`. Keep experimental edits in other checkouts separate; existing checkpoint and calibration artifacts may still reside there. ChimAnn validates coding tables and strips the header before invoking UniAnn. For converters using legacy `(n-i-1)%3` indexing, it stages frame columns as `[frame1, frame2, frame0]` to obtain the biologically verified `(n-i)%3` assignment. Corrected converters receive unchanged frame order. The manifest records this adapter; probabilities and upstream sources are unchanged.
+CNN-Mamba runs through `cnn_python`, an absolute path to Python in an existing GPU environment with CUDA-enabled PyTorch, Mamba, NumPy, pandas and pysam. Follow CNN-Mamba's installation instructions for its compiled CUDA dependencies. The workflow imports its source from `cnn_mamba_dir`; it does not install drivers or rebuild that environment. Verify GPU access in that Python environment before running.
 
 ### Usage
+
+All input and environment paths should be absolute. An existing EviAnn run can be reused directly:
+
 ```bash
-nextflow run ChimAnn -profile local_envs -params-file params.yaml \
-    -work-dir /scratch/chimann_work -resume
+nextflow run . -profile local_envs \
+  --annotation_env /abs/path/annotation_env \
+  --genome /abs/path/genome.fna \
+  --rnaseq /abs/path/original/rnaseq.list \
+  --proteins /abs/path/original/protein.faa \
+  --eviann_resume_dir /abs/path/completed/eviann_run \
+  --eviann_reuse_annotation true \
+  --cnn_mamba_dir /abs/path/ChimAnn/cnn-mamba \
+  --cnn_python /abs/path/gpu_env/bin/python \
+  --cnn_checkpoint /abs/path/joint_frame_checkpoint.pt \
+  --outdir /abs/path/results -work-dir /scratch/chimann_work -resume
 ```
-`params.yaml` (see `example/params.yaml`; all paths absolute):
 
-| param | meaning | default |
+Keep the original genome and protein basenames when resuming: EviAnn locates cached alignments by those names. The original RNA manifest and protein FASTA are still required by its final integration driver. The run directory is copied without BAMs; existing alignments and assembled transcripts are reused. The final pass executes upstream EviAnn's normal merge. Reusing a first-pass annotation retains its original producer's settings; unset `eviann_reuse_annotation` to recompute it with upstream EviAnn.
+
+Training is the default when `cnn_checkpoint` is unset. Replace the checkpoint option above with explicit, disjoint validation and test chromosome lists, leaving at least one chromosome for training. For the three nuclear S. pombe chromosomes, for example:
+
+```bash
+  --cnn_validation_chroms NC_003423.3 \
+  --cnn_test_chroms NC_003421.2
+```
+
+Both lists identify FASTA records, not windows. All training, validation and test targets come from the first-pass EviAnn annotation. Held-out results measure agreement with these pseudo-labels, not accuracy against a reference annotation. The original reference annotation is not a training input.
+
+| Parameter | Meaning | Default |
 | --- | --- | --- |
-| `genome` | target genome FASTA | required |
-| `rnaseq` | EviAnn `-r` list: one sample per line, `R1.fq.gz R2.fq.gz fastq` | none |
-| `proteins` | related-species protein FASTA (EviAnn `-p`) | none → EviAnn downloads Swiss-Prot |
-| `eviann_args` | extra `eviann.sh` options; `--splice-model markov` restores EviAnn's Markov chain splice filter | `--no-snap --splice-model cnn` |
-| `eviann_src` | directory of `eviann.sh` + helper scripts, prepended to PATH (binaries still come from the env). The default is the `eviann/` submodule ([hibiki-kato/eviann](https://github.com/hibiki-kato/eviann) branch `feature/cnn-splice`): it carries `--untrusted-cds` (needed by INTEGRATE), `--no-snap` and `--splice-model cnn`, none of which are in conda EviAnn 2.0.6 | `eviann/src` |
-| `eviann_resume_dir` | a finished EviAnn run directory to seed EVIANN from: read/protein alignments are copied, the merge stage reruns with the current `eviann_args` | none |
-| `outdir` | results directory | `results` |
-| `threads` | CPUs for EviAnn / INTEGRATE | 16 |
-| `min_seq_len` | sequences shorter than this skip PSAURON/sitescore/UniAnn (EviAnn still annotates them) | 100000 |
-| `segment_len` / `segment_overlap` | the ab initio track runs on overlapping segments (UniAnn needs ~0.6 GB RAM per Mb); each transcript is kept from the segment owning its midpoint. On fly 3R, 12 Mb segments reproduce 95% of whole-chromosome transcripts | 25 Mb / 4 Mb |
-| `psauron_chunk` | nt per psauron call; ~1 GB GPU per Mb | 4500000 |
-| `uniann_dir` | UniAnn install (dir with `bin/uniann.sh`) | `uniann/` submodule |
-| `uniann_args` | extra `uniann.sh` options | `-n` |
-| `uniann_kbest` | K > 0 adds UniAnn's gene-local k-best decoder: up to K-1 alternative transcripts per predicted gene (`.kbest.locusN.kM.gJ.t1` IDs, attributes `kbest_rank`, `kbest_delta` = path score minus the Viterbi path score) join the ab initio set. ~+0.4 GB RAM per Mb and single-threaded (D. melanogaster X: 6 min for K=5), so UNIANN runs 2-wide | 0 |
-| `kbest_delta_fraction` | INTEGRATE keeps a k-best alternative only if its score drop is at most this fraction of the largest drop among alternatives that reproduce one of EviAnn's own alternative isoforms (`bin/kbest_calibrate.py`); no confirmed isoforms → all alternatives dropped | 0.5 |
-| `integrate_novel_only` | pass only ab initio transcripts at loci without evidence mRNA to EviAnn `-c` (`bin/novel_cds.py`). Needed with EviAnn before 2c1e1f9, which let external CDS displace protein evidence; the submodule keeps evidence CDS itself | false |
-| `site_train_cmd` | command template for training a site scorer (`{genome} {annotation} {model_dir}`); see below | `sitescore train …` |
-| `site_score_cmd` | command template for scoring one sequence (`{model_dir} {fasta}` → `sites.tsv` on stdout) | `sitescore score …` |
-| `site_model_dir` | ready-made model directory; skips training | none |
-| `site_scorer_env` | conda yml or env path for the scorer (`-profile conda`) | `sitescore/environment.yml` |
-| `sitescore_model` | sitescore only: plug-in (`sitescore models`) | `convmamba` |
-| `sitescore_init` | sitescore only: pretrained `model_dir` to fine-tune from (recommended) | none → train from scratch |
-| `sitescore_hparams` | sitescore only: JSON forwarded to the model, e.g. `'{"epochs": 20, "batch_size": 2}'` | model defaults |
+| `genome`, `rnaseq`, `proteins` | Genome FASTA, EviAnn RNA manifest and related-species proteins | Genome required; supply evidence paths for EviAnn |
+| `eviann_args` | Additional upstream EviAnn options | empty |
+| `eviann_resume_dir` | Completed EviAnn directory used to seed the first pass | unset |
+| `eviann_reuse_annotation` | Keep its completed annotation instead of rerunning the first-pass merge | `false` |
+| `cnn_mamba_dir` | Clean upstream CNN-Mamba checkout | `cnn-mamba` |
+| `cnn_python` | Python executable in the prepared CUDA environment; an absolute path is recommended | `python` |
+| `cnn_checkpoint` | Joint four-class checkpoint; skips training | unset |
+| `cnn_validation_chroms`, `cnn_test_chroms` | Explicit chromosome holdouts required for training | unset |
+| `cnn_window_size`, `cnn_stride` | Model window and overlap stride | `10000`, `5000` |
+| `cnn_train_args` | Additional CNN-Mamba training options | empty |
+| `cnn_calibration_json` | Matching checkpoint's joint-logit temperature calibration | unset: temperature 1 |
+| `cnn_fit_temperature` | Fit a joint temperature on held-out EviAnn pseudo-labels | `false` |
+| `min_seq_len` | Shorter sequences retain EviAnn annotation only | `100000` |
+| `segment_len`, `segment_overlap`, `segment_margin` | Optional ab initio segment size, overlap and internal edge margin; `segment_len: 0` keeps chromosomes whole | `0`, `4000000`, `20000` |
+| `ab_initio_decoder` | Global best path decoder: `uniann` (native binary; about 0.2 GB per Mb with UniAnn PR #4) or `altann` (about 15 MB per Mb, about 3 times slower; needs AltAnn with `--uniann-gff`). Both give identical annotations | `uniann` |
+| `uniann_trace` | Keep the native DP/BT log, about 0.5 GB per Mb per strand. Without it AltAnn recomputes the same path | `false` |
+| `score_multiplier` | Shared UniAnn site probability multiplier, applied before logarithms; this is not temperature calibration | `e` |
+| `altann_kbest` | Paths retained per state; `0` disables alternatives | `10` |
+| `altann_flank` | Gene-local flank in bases | `1000` |
+| `kbest_delta_fraction` | Optional evidence-confirmed alternative score-drop filter | unset: off |
+| `integrate_args` | Additional upstream external-CDS options | empty |
+| `integrate_novel_only` | Legacy prefilter limiting candidates to loci without evidence mRNA | `false` |
 
-Outputs under `outdir/`:
+Temperature calibration is applied once to the CNN joint four-class logits, before softmax. It does not calibrate site heads. UniAnn and AltAnn consume the resulting scores without additional temperature scaling. Supplied calibration must belong to the selected checkpoint; fitting on EviAnn holdouts measures calibration against pseudo-labels. Avoid fitting again when supplying an existing calibration.
 
-| path | content |
-| --- | --- |
-| `eviann/<genome>.pseudo_label.gff` | EviAnn evidence-based annotation (first pass, CNN splice filter) |
-| `site_scorer/model_dir/` | trained site scorer (for sitescore: `model.pt`, `calibration.json`, `train_info.json`, `metrics.jsonl`) |
-| `uniann/<seq>.{plus,minus}.uniann.gff` | UniAnn ab initio predictions per sequence and strand |
-| `chimann.gff` | final annotation: EviAnn second pass with UniAnn CDS as low-trust evidence |
+AltAnn's K-Viterbi algorithm and candidate-ranking rules are unchanged. `merge_altann.py` checks every retained AltAnn reference CDS chain, strand and phase against UniAnn, then adds distinct complete alternatives. The optional `kbest_delta_fraction` filter concerns candidate score drops; it is separate from neural probability calibration. Without any evidence-confirmed alternatives, that optional filter drops all alternatives. Upstream EviAnn receives all combined predictions by default. Final ORF refinement and external, transcript-only and pseudogene rules can change or drop first-pass CDS. `integrate_novel_only` retains the older novel-locus prefilter.
 
-Add `-with-report report.html -with-trace trace.txt` for per-task timing and
-memory. Rerun with `-resume` after a failure; completed stages are cached.
+The scoring adapter accepts inference checkpoints without `optimizer_step`, recording unavailable training progress as missing metadata. This affects provenance only, not logits or scores.
 
-**Compute**: PSAURON runs on CPU (4 threads per task, faster than on the GPU
-for this model) in parallel with EviAnn. The site scorer is the only GPU stage
-(`maxForks 1`); sitescore training auto-sizes its batch to the free VRAM
-(`auto_batch`, default on) and validates every quarter epoch, stopping after `patience` evaluations
-without improvement (3 is enough when fine-tuning from a pretrained model: the
-best checkpoint usually comes within the first epoch or two).
+Outputs include the first-pass EviAnn annotation, CNN model/calibration provenance, oriented coding/site tables, UniAnn processed inputs and traceback, AltAnn candidates with score/provenance sidecars, and final `chimann.gff`. Add `-with-report report.html -with-trace trace.txt` for timing and memory. Use `-resume` to retain completed tasks; CNN and decoder source fingerprints invalidate cached scores after code changes.
 
-### Bring your own site scorer
-The site-scorer stage is isolated behind two shell commands; nothing else in the
-pipeline knows what runs inside them. To replace sitescore with your own model,
-set in `params.yaml`:
+The old PSAURON and sitescore files remain historical code; they are not active stages or dependencies. Installation initializes only `uniann`, `eviann` and `altann`, leaving unused legacy worktrees untouched. A successful model-scoring or decoder check alone does not establish complete EviAnn integration or annotation accuracy.
 
-```yaml
-site_train_cmd: "my_scorer train --genome {genome} --gff {annotation} --out {model_dir}"   # optional
-site_score_cmd: "my_scorer score --model {model_dir} --fasta {fasta}"                    # required
-site_scorer_env: /abs/path/my_env.yml        # or an existing conda env path
-# site_model_dir: /abs/path/ready_model       # if there is nothing to train
-```
-
-Contract (also in `docs/contracts.md`):
-
-- **train** runs once per genome. Inputs: the genome FASTA (`{genome}`) and
-  EviAnn's first-pass annotation GFF3 (`{annotation}`, mRNA/exon/CDS with
-  `ID`/`Parent`) as the only labels. It must create the directory `{model_dir}`
-  (any content). If `site_model_dir` is set, train is skipped.
-- **score** runs once per sequence (both strands, sequences shorter than
-  `min_seq_len` excluded). Inputs: `{model_dir}` and a single-sequence FASTA
-  (`{fasta}`). It must print `sites.tsv` to stdout: tab-separated, header
-  `chrom pos strand type motif prob`, one row per candidate motif on both strands.
-  `pos` is the 1-based coordinate on the + strand of the motif's first base
-  (for `-` rows: `pos = L - i`, `i` = 0-based index of the motif in the reverse
-  complement); `type` ∈ donor (GT), acceptor (AG), start (ATG), stop (TAA/TAG/TGA);
-  `prob` ∈ (0, 1]. UniAnn rescales by the best donor and needs some donor with
-  `prob > 1/e`; only the `+` rows and the `-` rows converted by `bin/strand_tools.py`
-  are consumed, so every candidate motif of the sequence should be present.
-- Runtime: both commands run in `site_scorer_env`, one task at a time
-  (`maxForks 1`; nothing else in the pipeline uses the GPU), retried once on failure. `bin/check_sites_tsv.py seq.fa sites.tsv`
-  validates the output and is run automatically after every score call; use it
-  while developing.
-
-Reference implementation: the `sitescore` submodule (`sitescore train` /
-`sitescore score`), whose defaults are what the templates expand to when unset.
-
-### Example
-`example/` holds *S. pombe* (genome, RNA-seq, reference GFF) and
-*S. octosporus* / *S. cryophilus* proteins; `example/params.spom_soct.yaml`
-annotates *S. pombe* with *S. octosporus* proteins.
+The October 16 S. pombe validation used the earlier EviAnn fork, including its CNN splice filter and `--untrusted-cds`; those metrics are historical and do not validate this upstream configuration. Upstream EviAnn lacks `--no-snap`, `--splice-model` and `--untrusted-cds`: the current workflow uses its normal Markov filter and plain `-c` integration, without the fork's extra external-CDS splice-filter step. The October 18 checks reran upstream EviAnn first-pass annotation and final integration on S. pombe using existing alignments and saved full-genome candidates, and verified clean-source CNN GPU inference on 30 kb plus both-strand decoder equivalence on 100 kb. Full-genome CNN scoring through the updated workflow was not regenerated. Shared CDS biology and EviAnn retention/reproducibility limitations remain.

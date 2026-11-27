@@ -6,6 +6,6 @@ rnaseq: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/D
 proteins: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Dmel/protein/proteins_related.eviann.faa
 outdir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/chimann/Dmel_cnn_kbest
 threads: 28
-eviann_resume_dir: /home/hibiki/nf_work/chimann_dmel/87/817d939617451d90dd4608a0be9ead/eviann_run
-site_model_dir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/chimann/Dmel_v2/site_scorer/model_dir
+eviann_resume_dir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/shared/external/Dmel/eviann/87/817d939617451d90dd4608a0be9ead/eviann_run
+# site_model_dir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/shared/models/chimann-dmel-v2  # removed 2026-11-07; not a parameter of the current main.nf
 uniann_kbest: 5

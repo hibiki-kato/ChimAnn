@@ -9,8 +9,7 @@ and map results back.
       owns its midpoint (owner interval = segment minus half the overlap on each
       interior side) and only if it lies fully inside the segment with a margin
 
-UniAnn's Viterbi and its PSAURON preprocessing hold whole-sequence arrays
-(~0.6 GB per Mb), so mammalian chromosomes must be run in pieces.
+--size 0, the default, keeps every sequence whole.
 """
 import argparse
 import re
@@ -43,10 +42,10 @@ def segment(a):
         if L < a.min_len:
             continue
         starts = [0]
-        while starts[-1] + a.size < L:
+        while a.size and starts[-1] + a.size < L:
             starts.append(starts[-1] + a.size - a.overlap)
         for s in starts:
-            e = min(s + a.size, L)
+            e = min(s + a.size, L) if a.size else L
             name = f"{cid}__{s}-{e}-{L}"
             with open(out / f"{name}.fa", "w") as fh:
                 fh.write(f">{name}\n")
@@ -96,7 +95,7 @@ def main():
     sp = ap.add_subparsers(dest="cmd", required=True)
     s = sp.add_parser("segment")
     s.add_argument("fasta")
-    s.add_argument("--size", type=int, default=25_000_000)
+    s.add_argument("--size", type=int, default=0, help="segment length; 0 keeps sequences whole")
     s.add_argument("--overlap", type=int, default=4_000_000)
     s.add_argument("--min-len", type=int, default=100_000)
     s.add_argument("--outdir", default="seqs")

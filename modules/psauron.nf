@@ -1,15 +1,15 @@
-// PSAURON coding-potential scores per sequence and strand (-a required by UniAnn),
+// PSAURON coding-potential scores for all six frames of each original sequence.
 // run in chunks (bin/psauron_chunked.py). CPU only: psauron is faster on 4 CPU
 // threads than on the GPU (measured 33 s vs 40 s per 4.5 Mb) and this keeps the
 // GPU free for the site scorer; tasks overlap with EviAnn.
 process PSAURON {
-    tag "$id $strand"
+    tag "$id"
 
     input:
-    tuple val(id), val(strand), path(seq)
+    tuple val(id), path(seq)
 
     output:
-    tuple val(id), val(strand), path('psauron_score.csv'), emit: csv
+    tuple val(id), path('psauron_score.csv'), emit: csv
 
     script:
     """
