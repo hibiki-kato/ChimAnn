@@ -1,7 +1,3 @@
-[submodule "uniann"]
-	path = uniann
-	url = https://github.com/alekseyzimin/UniAnn.git
-	branch = main
 [submodule "sitescore"]
 	path = sitescore
 	url = https://github.com/hibiki-kato/sitescore.git

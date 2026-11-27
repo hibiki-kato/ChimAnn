@@ -3,12 +3,12 @@
 
   kbest_calibrate.py evidence.gff ab_initio.gff [--fraction 0.5] > ab_initio.filtered.gff
 
-The combined input contains UniAnn baseline transcripts and AltAnn alternatives on both strands.
+The combined input contains baseline transcripts (the global path) and AltAnn alternatives on both strands.
 AltAnn's kbest_delta is its candidate path score minus the reference score over the same local interval.
 An alternative is EviAnn-confirmed when its CDS chain matches a transcript at an evidence gene with >= 2 distinct CDS chains.
-A UniAnn baseline must also match a chain at that gene.
+A baseline must also match a chain at that gene.
 The cutoff is fraction * min(delta of confirmed alternatives); alternatives below it are removed.
-UniAnn baseline transcripts, identified by the absence of kbest_delta, pass through unchanged.
+Baseline transcripts, identified by the absence of kbest_delta, pass through unchanged.
 Without confirmed alternatives, all alternatives are dropped.
 """
 import argparse

@@ -8,9 +8,9 @@ genome + evidence.gff -> CNN_MODEL -> checkpoint + optional joint calibration
                        (cnn_checkpoint skips training)
 genome -> SPLIT_GENOME -> segment FASTA
 segment + checkpoint -> CNN_SCORE -> plus/minus oriented FASTA, coding.tsv, sites.tsv
-oriented inputs -> UNIANN -> processed scores + native best-path GFF/traceback
-processed scores + best path -> ALTANN -> existing K-best candidates [K > 0]
-UniAnn + distinct AltAnn alternatives -> ab_initio.gff
+oriented inputs -> ALTANN: altann prepare -> decoder inputs (no further temperature)
+                          altann decode --exact-baseline -> global best path + K-best candidates
+global path (baseline) + distinct AltAnn alternatives -> ab_initio.gff
 completed EviAnn run + ab_initio.gff -> INTEGRATE -> chimann.gff
 ```
 
@@ -46,23 +46,23 @@ chrom	pos	strand	type	motif	prob
 
 Site types are donor/acceptor/start/stop, with GT/AG/ATG/TAA,TAG,TGA motifs. In each independently scored oriented FASTA, positions are 1-based motif starts in that sequence and rows passed to the forward UniAnn wrapper use `+`. Minus genomic predictions arise from scoring a reverse-complement FASTA and restoring coordinates later, not from feeding a minus-labelled original-coordinate table into the forward wrapper.
 
-## UniAnn processed scores and traceback
+## AltAnn decoder inputs
 
-Each orientation is converted independently. Local offset `i` at 0-based oriented position `n` selects absolute Viterbi exon frame `(n-i)%3`. Upstream UniAnn currently uses `(n-i-1)%3`; ChimAnn detects that formula and stages columns `[frame1, frame2, frame0]`, producing the verified assignment without changing probabilities or patching UniAnn. Corrected `(n-i)%3` converters receive the original order; unknown formulas fail. Header removal, validation and the recorded frame adapter occur in ChimAnn. AltAnn consumes the resulting processed emissions directly.
+`altann prepare` converts each orientation independently. Local class `i` at 0-based oriented position `n` scores absolute Viterbi exon frame `(n-i)%3`. No temperature is applied after the model's own calibration; UniAnn 08eaf15's converter applied `sigmoid(logit(p)/3)` again, which is why ChimAnn no longer uses it. The emissions match UniAnn f126cc8, the last upstream converter without a temperature.
 
-`out.ps.txt` contains `position N E0 E1 E2 I nucleotide`: a 0-based position, five log emission columns and the sequence base. The intron column is shared by `I0/I1/I2`; state order remains `N E0 E1 E2 I0 I1 I2`. Native stop masks and transition rules remain UniAnn's responsibility. `out.gt.txt`, `out.ag.txt`, `out.atg.txt` and `out.stop.txt` contain sparse 0-based motif-start positions and transformed site scores. UniAnn's probability multiplier `score_multiplier=e` and donor-based scaling are score transformations, not temperature calibration.
+`out.ps.txt` contains `position N E0 E1 E2 I nucleotide`: a 0-based position, five log emission columns and the sequence base. The intron column is shared by `I0/I1/I2`; state order is `N E0 E1 E2 I0 I1 I2`. `out.gt.txt`, `out.ag.txt`, `out.atg.txt` and `out.stop.txt` contain sparse 0-based motif-start positions and transformed site scores. The probability multiplier `score_multiplier=e` and donor-based scaling are score transformations, not temperature calibration. An orientation without a donor whose rescaled score is positive is skipped.
 
-The coding converter currently uses `log(e * P(frame_i) * (1-P(non_CDS)) + 1e-10)`, rounded to two decimals, and `log(e * P(non_CDS) + 1e-10)` for noncoding. Bowen exports joint frame probabilities, so the extra coding-mass factor is an upstream UniAnn weighting, not a plain log joint probability. ChimAnn and AltAnn preserve that weighting; its interpretation is for UniAnn to confirm.
+The coding emission is `log(e * P(frame_i) * (1-P(non_CDS)) + 1e-10)`, rounded to two decimals, and `log(e * P(non_CDS) + 1e-10)` for noncoding. The extra coding-mass factor is the upstream UniAnn weighting, kept as is.
 
-The native best path and DP/BT traceback are saved with these exact processed inputs. AltAnn uses them as the reference for its gene-local K-best runs. No legacy emission source is substituted when joint-frame predictions are missing.
+The global best path comes from exact K=1 metadata-state search over the whole sequence (`--exact-baseline`); local K-best runs use it as their reference. No legacy emission source is substituted when joint-frame predictions are missing.
 
 ## Coordinates, segments and alternatives
 
 Both decoders run in oriented 0-based coordinates. GFF uses 1-based inclusive coordinates. For a reverse-complement interval `[a,b]` in 1-based inclusive coordinates on length `L`, genomic segment coordinates are `[L-b+1,L-a+1]` with strand `-`; transcript-order CDS phases are preserved.
 
-Chromosomes are decoded whole by default, as one segment spanning the sequence. A nonzero `segment_len` splits them. Segments use IDs `<seqid>__<start>-<end>-<len>`. After decoding, ChimAnn's coordinate adapters restore chromosome coordinates and retain each transcript from the segment owning its midpoint, with the configured internal edge margin. Sequence identifiers, strands and phases must agree across UniAnn and AltAnn.
+Chromosomes are decoded whole by default, as one segment spanning the sequence. A nonzero `segment_len` splits them. Segments use IDs `<seqid>__<start>-<end>-<len>`. After decoding, ChimAnn's coordinate adapters restore chromosome coordinates and retain each transcript from the segment owning its midpoint, with the configured internal edge margin. Sequence identifiers, strands and phases are checked when the strand jobs are merged.
 
-`altann_kbest: 0` disables alternatives. Otherwise AltAnn retains the existing K paths per state and existing gene-local flank and short-CDS filtering. Its GFF3 uses `kbest_rank`, `kbest_locus` and `kbest_delta`; TSV/JSON sidecars hold scores and provenance. `merge_altann.py` requires every AltAnn reference CDS chain to occur in UniAnn on the same strand with identical phases. It keeps UniAnn, removes duplicate references, and adds distinct complete alternatives only from retained reference loci. Candidate recall is distinct from final annotation precision.
+`altann_kbest: 0` keeps only the global path. Otherwise AltAnn retains K paths per state (exact metadata states by default) with gene-local flank and short-CDS filtering. Its GFF3 uses `kbest_rank`, `kbest_locus` and `kbest_delta`; TSV/JSON sidecars hold scores and provenance. `run_altann.py` writes the rank-0 models without `kbest_*` attributes as baselines, and `merge_altann.py` adds distinct complete alternatives only from retained reference loci. Candidate recall is distinct from final annotation precision.
 
 ## Final EviAnn integration
 

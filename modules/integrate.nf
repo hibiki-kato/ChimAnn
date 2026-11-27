@@ -1,5 +1,5 @@
 // Integration is EviAnn's job: rerun the driver on its own work directory with
-// UniAnn best paths and AltAnn alternatives passed as external CDS (-c).
+// AltAnn best paths and alternatives passed as external CDS (-c).
 // EviAnn applies its integration rules and final merge. EviAnn
 // (>= 2c1e1f9) keeps evidence-based CDS over external ones itself, so all
 // predictions are passed; params.integrate_novel_only restores the older

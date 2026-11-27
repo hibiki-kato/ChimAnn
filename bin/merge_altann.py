@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Keep UniAnn models and add distinct, complete AltAnn alternatives.
+"""Keep baseline (global-path) models and add distinct, complete AltAnn alternatives.
 
 Both GFFs must use the same genomic coordinates.
-Every AltAnn rank-zero CDS chain must occur in UniAnn, including its strand and CDS phases.
-Additional UniAnn models are retained.
+Every AltAnn rank-zero CDS chain must occur in the baseline, including its strand and CDS phases.
+Additional baseline models are retained.
 AltAnn rank-zero rows are omitted, and rank-positive models are added only when their CDS chain is absent from all retained models.
 Alternatives whose locus has no retained AltAnn reference are omitted because the reference failed an ownership or short-CDS filter.
 AltAnn's escaped sequence identifiers are decoded once to match the original FASTA identifiers.
