@@ -4,6 +4,8 @@ dependencies:
   - eviann            # bioconda 2.0.6
   - gffcompare
   - gffread
+  - pytorch          # eviann --splice-model cnn (CPU build is enough; CUDA is used if present)
+  - numpy
   - pip
   - pip:
       - psauron       # PyPI only (1.1.3)
