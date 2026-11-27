@@ -1,6 +1,6 @@
 // One FASTA per sequence >= params.min_seq_len, kept whole by default. A nonzero
 // params.segment_len cuts pieces overlapping by params.segment_overlap
-// (bin/segment_genome.py), and UNIANN keeps each transcript from the segment
+// (bin/segment_genome.py), and ALTANN keeps each transcript from the segment
 // that owns its midpoint.
 // Shorter sequences skip the ab initio track (EviAnn still annotates them).
 process SPLIT_GENOME {

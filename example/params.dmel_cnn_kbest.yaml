@@ -1,6 +1,6 @@
-# D. melanogaster with the CNN splice model in EviAnn and k-best (K=5) in UniAnn.
+# D. melanogaster with the CNN splice model in EviAnn and k-best (K=5) in AltAnn.
 # Reuses the finished EviAnn alignments and the trained site scorer from the
-# Dmel_v2 run, so only the EviAnn merge, UniAnn and the integration are new.
+# Dmel_v2 run, so only the EviAnn merge, AltAnn and the integration are new.
 genome: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Dmel/ref/genome.fna
 rnaseq: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Dmel/rna/rna_fastq_manifest.eviann.txt
 proteins: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/data/basic_data/Dmel/protein/proteins_related.eviann.faa
@@ -8,4 +8,4 @@ outdir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/chimann/Dmel
 threads: 28
 eviann_resume_dir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/shared/external/Dmel/eviann/87/817d939617451d90dd4608a0be9ead/eviann_run
 # site_model_dir: /home/hibiki/Dropbox/RA2022/kato/research/Projects/DNA/work/shared/models/chimann-dmel-v2  # removed 2026-11-07; not a parameter of the current main.nf
-uniann_kbest: 5
+altann_kbest: 5
