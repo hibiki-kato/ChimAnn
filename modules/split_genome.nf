@@ -1,8 +1,7 @@
-// One FASTA per segment: sequences >= params.min_seq_len are cut into
-// params.segment_len pieces overlapping by params.segment_overlap
-// (bin/segment_genome.py). Downstream PSAURON / site scoring / UniAnn work per
-// segment (UniAnn needs ~0.6 GB RAM per Mb); UNIANN maps coordinates back and
-// keeps each transcript from the segment that owns its midpoint.
+// One FASTA per sequence >= params.min_seq_len, kept whole by default. A nonzero
+// params.segment_len cuts pieces overlapping by params.segment_overlap
+// (bin/segment_genome.py), and UNIANN keeps each transcript from the segment
+// that owns its midpoint.
 // Shorter sequences skip the ab initio track (EviAnn still annotates them).
 process SPLIT_GENOME {
     input:

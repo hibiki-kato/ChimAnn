@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""Drop UniAnn k-best alternatives whose score drop is too large, with the cutoff
-calibrated on the evidence-based annotation.
+"""Filter AltAnn alternatives using an evidence-calibrated score cutoff.
 
-  kbest_calibrate.py evidence.gff uniann.gff [--fraction 0.5] > uniann.filtered.gff
+  kbest_calibrate.py evidence.gff ab_initio.gff [--fraction 0.5] > ab_initio.filtered.gff
 
-An alternative (transcript with kbest_delta=..., produced by kbest_alternatives.py)
-counts as EviAnn-confirmed when its CDS chain equals the CDS chain of an EviAnn mRNA
-at a gene with >= 2 distinct CDS chains and a Viterbi (k1) UniAnn transcript of the same
-locus matches another chain of that gene: a genuine alternative isoform that the
-global path missed but a k-best path recovered. Cutoff = fraction * min(delta of
-confirmed alternatives); alternatives with delta below it are removed, everything else
-(Viterbi transcripts included) is passed through unchanged. Without confirmed
-alternatives (few genes, no evidence) all alternatives are dropped.
+The combined input contains UniAnn baseline transcripts and AltAnn alternatives on both strands.
+AltAnn's kbest_delta is its candidate path score minus the reference score over the same local interval.
+An alternative is EviAnn-confirmed when its CDS chain matches a transcript at an evidence gene with >= 2 distinct CDS chains.
+A UniAnn baseline must also match a chain at that gene.
+The cutoff is fraction * min(delta of confirmed alternatives); alternatives below it are removed.
+UniAnn baseline transcripts, identified by the absence of kbest_delta, pass through unchanged.
+Without confirmed alternatives, all alternatives are dropped.
 """
 import argparse
 import collections
@@ -50,9 +48,8 @@ for c, g in chain_gene.items():
 alt_genes = {g for g, cs in gene_chains.items() if len(cs) >= 2}
 
 rows, un_chain, un_attrs, _ = read(a.uniann)
-# UniAnn locus of a k-best alternative: ID = <prefix>.locusN.kM.gJ.t1; its k1 sibling is
-# not in the file under that name (k1 = the Viterbi output), so match k1 by coordinates:
-# a Viterbi transcript at the same EviAnn gene counts as the locus's k1.
+# Match UniAnn baselines to EviAnn genes by chromosome, strand, and CDS coordinates.
+# Baselines lack kbest_delta; matching does not depend on UniAnn or AltAnn ID formats.
 viterbi_genes = {chain_gene[c] for t, c in un_chain.items() if "kbest_delta" not in un_attrs[t] and c in chain_gene}
 confirmed = []
 for tid, c in un_chain.items():

@@ -1,6 +1,13 @@
-genome: /abs/path/dev/ChimAnn/example/input/S_pombe/genome.fna
-rnaseq: /abs/path/rnaseq.list      # lines: /abs/path/R1.fastq /abs/path/R2.fastq fastq
+# Train using only EviAnn labels; replace paths with your own absolute paths.
+genome: /abs/path/genome.fna
+rnaseq: /abs/path/rnaseq.list
 proteins: /abs/path/related_proteins.faa
-outdir: /abs/path/dev/ChimAnn/example/output
+cnn_mamba_dir: /abs/path/ChimAnn/cnn-mamba
+cnn_python: /abs/path/gpu_env/bin/python
+cnn_validation_chroms: [NC_003423.3]
+cnn_test_chroms: [NC_003421.2]
+# Alternatively supply cnn_checkpoint and omit the two held-out lists.
+# cnn_checkpoint: /abs/path/joint_frame_checkpoint.pt
+# cnn_calibration_json: /abs/path/matching/temperature.json
+outdir: /abs/path/chimann_results
 threads: 16
-# sitescore_init: /abs/path/ChimAnn/sitescore/models/convmamba-human-grch38   # after `sitescore fetch`

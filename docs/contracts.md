@@ -1,79 +1,77 @@
 # ChimAnn stage contracts
 
-`main.nf` chains five stages. Each boundary is a plain file; this page pins
-the formats so components can be swapped independently.
+The active workflow has one CNN-Mamba model for coding-frame and site predictions:
 
+```text
+genome + RNA/protein evidence -> EVIANN -> evidence.gff + completed run directory
+genome + evidence.gff -> CNN_MODEL -> checkpoint + optional joint calibration
+                       (cnn_checkpoint skips training)
+genome -> SPLIT_GENOME -> segment FASTA
+segment + checkpoint -> CNN_SCORE -> plus/minus oriented FASTA, coding.tsv, sites.tsv
+oriented inputs -> UNIANN -> processed scores + native best-path GFF/traceback
+processed scores + best path -> ALTANN -> existing K-best candidates [K > 0]
+UniAnn + distinct AltAnn alternatives -> ab_initio.gff
+completed EviAnn run + ab_initio.gff -> INTEGRATE -> chimann.gff
 ```
-genome.fa ──> EVIANN ──> <genome>.pseudo_label.gff ──┐
-    │                                                ├─> SITE_TRAIN ─> model_dir
-    ├─> SPLIT_GENOME ─> <seq>.fa ─┬─> PSAURON ─> psauron_score.csv ─┐
-    │                             ├─> SITE_SCORE ─> sites.tsv ───┼─> UNIANN ─> <seq>.fa.uniann.gff
-    │                             └─────────────────────────────────┘        │
-    └─> INTEGRATE = eviann.sh -c uniann.gff --untrusted-cds ─> chimann.gff <─┘
+
+## Evidence and training
+
+`EVIANN` runs upstream `eviann.sh -t N -g genome.fna -r rnaseq.list -p protein.faa` with its normal Markov splice filter and annotation rules. RNA manifest entries must contain absolute paths. `eviann_args` and `integrate_args` default to empty. The installed runtime is created by `python3 bin/install_eviann.py --source eviann --outdir eviann/bin`, with required annotation tools available on `PATH`; the upstream source remains unmodified.
+
+`eviann_resume_dir` seeds a copy of completed alignments and transcript assemblies. By default the first-pass merge reruns. With `eviann_reuse_annotation: true`, the nonempty completed `<genome>.pseudo_label.gff` is reused directly; the final integration pass still runs. Reused annotations retain their original provenance; they are not silently regenerated as upstream output. Preserve the genome/protein basenames and original evidence paths so EviAnn resolves its cached files.
+
+`CNN_MODEL` uses only that EviAnn annotation as labels. Explicit `cnn_validation_chroms` and `cnn_test_chroms` are required for training, must be nonempty and disjoint, and must leave training chromosomes. Splits contain whole FASTA records, preventing overlap between training and held-out windows. Model windows default to 10,000 bases with stride 5,000. Both strand orientations, motif labels and local coding-phase targets use CNN-Mamba's preparation rules.
+
+The upstream dataset interface contains `reference_*`/`chess_*` arrays; the ChimAnn adapter fills these from the same EviAnn labels. They are compatibility fields, not independently verified reference truth. Validation, test metrics and optional temperature fitting therefore measure held-out EviAnn pseudo-label consistency.
+
+`cnn_checkpoint` skips training and must contain the joint four-class head as well as the site heads. CNN-Mamba runs with `cnn_python` from the clean `cnn_mamba_dir` checkout, default the `cnn-mamba` submodule. Checkpoints/calibration can be stored elsewhere, including an experimental checkout, without importing that checkout's source. An inference checkpoint may omit `optimizer_step`; the adapter records missing progress without changing model outputs.
+
+## Probabilities and calibration
+
+The joint head's class order is `[non_CDS, frame0, frame1, frame2]`. Frame labels are local codon offsets: offset 0 is the first coding base, followed by 1 and 2. `CNN_SCORE` exports probabilities after `softmax(logits / T)`, with `T=1` unless `cnn_calibration_json` supplies a temperature or `cnn_fit_temperature` requests fitting during model preparation. Calibration belongs to the chosen checkpoint and is applied once to the joint head only. Site heads retain their model probabilities.
+
+`coding.tsv` is tab-separated with the CNN-Mamba header:
+
+```text
+chrom	position_1based	strand	frame0_probability	frame1_probability	frame2_probability	noncoding_probability	predicted_state
 ```
 
-## EVIANN
-- Command: `eviann.sh -t N -g genome.fa [-r rnaseq.list] [-p proteins.faa]`
-- Output used: `<genome>.pseudo_label.gff` (evidence-based annotation),
-  `<genome>.proteins.fasta`.
-- `-r` list file must contain absolute paths (EviAnn reads it inside the work dir).
+It contains exactly one row per oriented FASTA base, in contiguous 1-based order. The export reorders the internal noncoding-first class probabilities. Chromosome IDs match the oriented FASTA, and both independently oriented exports use `+` labels. ChimAnn's `run_uniann.py` strips the exact header and validates row count, coordinates, strand and finite probabilities before invoking UniAnn. The pinned upstream converter does not handle the header itself.
 
-## PSAURON
-- Command: `psauron -i seq.fa -a` (the `-a` flag is mandatory: UniAnn reads the
-  per-frame per-base probability columns 10–15 of `psauron_score.csv`).
-- Input: one sequence per FASTA.
+`sites.tsv` is tab-separated with this header:
 
-## Site scorer (`SITE_TRAIN` / `SITE_SCORE`; default = `sitescore/` submodule)
-Any tool can fill this stage through `params.site_train_cmd` / `params.site_score_cmd`
-(README "Bring your own site scorer"); `bin/check_sites_tsv.py` validates the output.
-
-[hibiki-kato/sitescore](https://github.com/hibiki-kato/sitescore): one `SiteModel`
-interface (`train` / `load` / `score`), models registered as plug-ins
-(`sitescore models`). convmamba is the first plug-in; LLM or other models add a
-package + one entry-point line, nothing in ChimAnn changes.
-
-- `sitescore train --model M --genome genome.fa --annotation eviann.gff --out model_dir [--init pretrained_dir]`
-  trains (or fine-tunes) on EviAnn's preliminary annotation.
-- `sitescore train` ends with a Platt fit on the validation sequences
-  (`model_dir/calibration.json`); `sitescore score` emits calibrated probabilities.
-- `sitescore score --model-dir model_dir --fasta seq.fa > sites.tsv`
-
-### sites.tsv (consumed by `uniann.sh -s`)
-Tab-separated, header row, 1-based coordinates, probabilities in (0, 1]:
-
+```text
+chrom	pos	strand	type	motif	prob
 ```
-chrom  pos  strand  type      motif  prob
-X      7    +       donor     GT     3.43e-05
-```
-`type` ∈ {donor, acceptor, start, stop}. `uniann.sh` currently uses `+` strand
-rows only and takes the **last** column as the score. Reference file:
-`dev/UniAnn/data/dmel/chrX_sites.tsv`.
 
-## UNIANN (per segment **and strand**)
-Sequences are cut into `segment_len` pieces overlapping by `segment_overlap`
-(`bin/segment_genome.py segment`, ids `<seqid>__<start>-<end>-<len>`); after UniAnn,
-`unsegment` restores coordinates and keeps a transcript only from the segment that
-owns its midpoint (interior boundaries at half the overlap) and only if it lies
-`--margin` (20 kb) inside the segment.
+Site types are donor/acceptor/start/stop, with GT/AG/ATG/TAA,TAG,TGA motifs. In each independently scored oriented FASTA, positions are 1-based motif starts in that sequence and rows passed to the forward UniAnn wrapper use `+`. Minus genomic predictions arise from scoring a reverse-complement FASTA and restoring coordinates later, not from feeding a minus-labelled original-coordinate table into the forward wrapper.
 
-UniAnn decodes the + strand only. `bin/strand_tools.py` makes the - strand a
-second + run: `revcomp` the sequence, `sites_rc` remaps sitescore's `-` rows
-(rc pos = L - pos + 1), PSAURON runs on the rc sequence, and `flip_gff` maps
-the result back (start' = L - end + 1, end' = L - start + 1, strand -).
+## UniAnn processed scores and traceback
 
-- Command: `uniann.sh -f seq.fa -p psauron_score.csv -s sites.tsv -n`
-- `uniann.sh` rescales scores by the best donor and aborts unless some donor has
-  prob > 1/e; UNIANN emits an empty GFF for such sequences (e.g. mitochondria).
-- Output: `seq.fa.uniann.gff`. UniAnn is the `uniann/` submodule
-  ([hibiki-kato/UniAnn](https://github.com/hibiki-kato/UniAnn)); run its
-  `install.sh` once to build `uniann/bin`. Override with `params.uniann_dir`.
+Each orientation is converted independently. Local offset `i` at 0-based oriented position `n` selects absolute Viterbi exon frame `(n-i)%3`. Upstream UniAnn currently uses `(n-i-1)%3`; ChimAnn detects that formula and stages columns `[frame1, frame2, frame0]`, producing the verified assignment without changing probabilities or patching UniAnn. Corrected `(n-i)%3` converters receive the original order; unknown formulas fail. Header removal, validation and the recorded frame adapter occur in ChimAnn. AltAnn consumes the resulting processed emissions directly.
 
-## INTEGRATE (EviAnn, second pass)
-- Command: `eviann.sh <same args as EVIANN> -c uniann.gff --untrusted-cds`,
-  run in a copy of the first pass's directory so alignment is not repeated
-  (`-c` clears `merge.success`, so EviAnn resumes from the merge step).
-- Only UniAnn transcripts at loci without an evidence mRNA are passed
-  (`bin/novel_cds.py`); EviAnn emits external CDS only at such loci, and
-  passing overlapping ones displaces real protein evidence.
-- UniAnn CDS are *low-trust*: they pass EviAnn's splice-site filtering before
-  the final merge. Output: `<genome>.pseudo_label.gff` → `chimann.gff`.
+`out.ps.txt` contains `position N E0 E1 E2 I nucleotide`: a 0-based position, five log emission columns and the sequence base. The intron column is shared by `I0/I1/I2`; state order remains `N E0 E1 E2 I0 I1 I2`. Native stop masks and transition rules remain UniAnn's responsibility. `out.gt.txt`, `out.ag.txt`, `out.atg.txt` and `out.stop.txt` contain sparse 0-based motif-start positions and transformed site scores. UniAnn's probability multiplier `score_multiplier=e` and donor-based scaling are score transformations, not temperature calibration.
+
+The coding converter currently uses `log(e * P(frame_i) * (1-P(non_CDS)) + 1e-10)`, rounded to two decimals, and `log(e * P(non_CDS) + 1e-10)` for noncoding. Bowen exports joint frame probabilities, so the extra coding-mass factor is an upstream UniAnn weighting, not a plain log joint probability. ChimAnn and AltAnn preserve that weighting; its interpretation is for UniAnn to confirm.
+
+The native best path and DP/BT traceback are saved with these exact processed inputs. AltAnn uses them as the reference for its gene-local K-best runs. No legacy emission source is substituted when joint-frame predictions are missing.
+
+## Coordinates, segments and alternatives
+
+Both decoders run in oriented 0-based coordinates. GFF uses 1-based inclusive coordinates. For a reverse-complement interval `[a,b]` in 1-based inclusive coordinates on length `L`, genomic segment coordinates are `[L-b+1,L-a+1]` with strand `-`; transcript-order CDS phases are preserved.
+
+Chromosomes are decoded whole by default, as one segment spanning the sequence. A nonzero `segment_len` splits them. Segments use IDs `<seqid>__<start>-<end>-<len>`. After decoding, ChimAnn's coordinate adapters restore chromosome coordinates and retain each transcript from the segment owning its midpoint, with the configured internal edge margin. Sequence identifiers, strands and phases must agree across UniAnn and AltAnn.
+
+`altann_kbest: 0` disables alternatives. Otherwise AltAnn retains the existing K paths per state and existing gene-local flank and short-CDS filtering. Its GFF3 uses `kbest_rank`, `kbest_locus` and `kbest_delta`; TSV/JSON sidecars hold scores and provenance. `merge_altann.py` requires every AltAnn reference CDS chain to occur in UniAnn on the same strand with identical phases. It keeps UniAnn, removes duplicate references, and adds distinct complete alternatives only from retained reference loci. Candidate recall is distinct from final annotation precision.
+
+## Final EviAnn integration
+
+`INTEGRATE` copies the first-pass directory without BAMs and calls upstream EviAnn with `-c ab_initio.gff`. Copies are independent: hard links are unsafe because EviAnn truncates files. `-c` clears `merge.success`, so upstream filtering and merging rerun while completed alignments and assemblies are reused. The final annotation must be newly written and nonempty.
+
+Upstream EviAnn has no `--no-snap`, `--splice-model` or `--untrusted-cds` options. Its ordinary external-CDS handling replaces the earlier fork-specific CNN/untrusted-CDS path; in particular, the extra external-CDS splice-filter step is absent. ORF refinement and external, transcript-only and pseudogene rules can change or drop first-pass CDS. `integrate_novel_only: true` retains the optional novel-locus prefilter.
+
+`kbest_delta_fraction`, unset by default, optionally bounds alternative score drops using EviAnn-confirmed alternatives. With no confirmed alternatives, this filter removes all alternatives. It is not neural temperature calibration and does not modify the K-Viterbi search.
+
+The resulting `<genome>.pseudo_label.gff` becomes `chimann.gff`. Report complete end-to-end validation only after this final driver actually runs and its nonempty output is checked.
+
+The October 16 validation used the earlier fork; its metrics do not establish accuracy or complete validation of the current upstream configuration.

@@ -1,11 +1,18 @@
 [submodule "uniann"]
 	path = uniann
-	url = https://github.com/hibiki-kato/UniAnn.git
-	branch = feature/local-k-best
+	url = https://github.com/alekseyzimin/UniAnn.git
+	branch = main
 [submodule "sitescore"]
 	path = sitescore
 	url = https://github.com/hibiki-kato/sitescore.git
 [submodule "eviann"]
 	path = eviann
-	url = https://github.com/hibiki-kato/eviann.git
-	branch = feature/cnn-splice
+	url = https://github.com/alekseyzimin/eviann.git
+	branch = main
+[submodule "altann"]
+	path = altann
+	url = https://github.com/hibiki-kato/AltAnn.git
+	branch = main
+[submodule "cnn-mamba"]
+	path = cnn-mamba
+	url = https://github.com/bowencccc/cnn-mamba.git

@@ -1,55 +1,39 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl = 2
 
-// ChimAnn: EviAnn (alignment + filtering) -> PSAURON + site scorer (UniAnn inputs)
-//          -> UniAnn (ab initio) -> EviAnn again, taking UniAnn CDS as low-trust evidence
-
-include { EVIANN        } from './modules/eviann'
-include { SPLIT_GENOME  } from './modules/split_genome'
-include { PSAURON       } from './modules/psauron'
-include { SITE_TRAIN    } from './modules/site_scorer'
-include { SITE_SCORE    } from './modules/site_scorer'
-include { REVCOMP       } from './modules/uniann'
-include { SPLIT_SITES   } from './modules/uniann'
-include { UNIANN        } from './modules/uniann'
-include { INTEGRATE     } from './modules/integrate'
+include { EVIANN; eviannSourceDigest } from './modules/eviann'
+include { SPLIT_GENOME } from './modules/split_genome'
+include { CNN_MODEL; CNN_SCORE; cnnSourceDigest } from './modules/cnn_mamba'
+include { UNIANN; uniannSourceDigest } from './modules/uniann'
+include { ALTANN; altannSourceDigest } from './modules/altann'
+include { INTEGRATE    } from './modules/integrate'
 
 workflow {
-    genome = Channel.fromPath(params.genome, checkIfExists: true)
-
-    // 1. Evidence-based annotation (EviAnn)
-    EVIANN(genome)
-    evidence_gff = EVIANN.out.gff
-
-    // 2. Per-sequence scatter: UniAnn and PSAURON take one sequence at a time
+    def legacy = params.keySet().findAll { it.startsWith('psauron_') || it.startsWith('site_') || it.startsWith('sitescore_') || it == 'uniann_args' }
+    if (legacy)
+        error "Legacy scoring options ${legacy.join(', ')} are unsupported; use the CNN parameters in example/params.yaml"
+    if (params.eviann_reuse_annotation && !params.eviann_resume_dir)
+        error 'eviann_reuse_annotation requires eviann_resume_dir'
+    if (!params.cnn_checkpoint && (!params.cnn_validation_chroms || !params.cnn_test_chroms))
+        error 'Training requires cnn_validation_chroms and cnn_test_chroms (disjoint FASTA record lists)'
+    genome = Channel.fromPath(params.genome, checkIfExists: true).first()
+    eviann_sources = Channel.value(eviannSourceDigest())
+    EVIANN(genome, eviann_sources)
+    checkpoints = Channel.value(params.cnn_checkpoint ? [file(params.cnn_checkpoint, checkIfExists: true)] : [])
+    calibrations = Channel.value(params.cnn_calibration_json ? [file(params.cnn_calibration_json, checkIfExists: true)] : [])
+    cnn_sources = Channel.value(cnnSourceDigest())
+    CNN_MODEL(genome, EVIANN.out.gff, checkpoints, calibrations, cnn_sources)
     SPLIT_GENOME(genome)
     seqs = SPLIT_GENOME.out.seqs.flatten().map { f -> tuple(f.baseName, f) }
-
-    // 3a. Both strands: UniAnn decodes + only, so "-" = reverse complement
-    REVCOMP(seqs)
-    stranded = seqs.map { id, f -> tuple(id, '+', f) }.mix(REVCOMP.out.seq)   // (id, strand, fa)
-
-    // 3b. PSAURON coding-potential emissions per strand
-    PSAURON(stranded)
-
-    // 3c. Site scorer: train on EviAnn's preliminary annotation (unless a model_dir is
-    //     given), score both strands of every sequence, split by strand.
-    //     The site scorer is the only GPU user (PSAURON runs on CPU), so no cross-process
-    //     GPU serialization is needed; SITE_* are maxForks 1.
-    if (params.site_model_dir) {
-        site_model = Channel.value(file(params.site_model_dir, checkIfExists: true))
+    CNN_SCORE(seqs, CNN_MODEL.out.model, cnn_sources)
+    UNIANN(CNN_SCORE.out.scores, Channel.value(uniannSourceDigest()))
+    def k = params.uniann_kbest != null ? params.uniann_kbest as int : params.altann_kbest as int
+    if (k > 0) {
+        ALTANN(UNIANN.out.jobs, Channel.value(altannSourceDigest()))
+        predictions = ALTANN.out.gff
     } else {
-        SITE_TRAIN(genome, evidence_gff)
-        site_model = SITE_TRAIN.out.model.collect()          // value channel: one model, every sequence
+        predictions = UNIANN.out.jobs.map { id, job, gff -> tuple(id, gff) }
     }
-    SITE_SCORE(seqs, site_model)
-    SPLIT_SITES(seqs.join(SITE_SCORE.out.sites))
-    sites = SPLIT_SITES.out.plus.mix(SPLIT_SITES.out.minus)                 // (id, strand, tsv)
-
-    // 4. Ab initio prediction (UniAnn), one run per sequence and strand
-    UNIANN(stranded.join(PSAURON.out.csv, by: [0, 1]).join(sites, by: [0, 1]))
-    ab_initio_gff = UNIANN.out.gff.map { it[2] }.collectFile(name: 'uniann.gff', sort: true)
-
-    // 5. Integration by EviAnn: UniAnn CDS enter as low-trust external evidence
-    INTEGRATE(genome, EVIANN.out.run_dir, evidence_gff, ab_initio_gff)
+    ab_initio_gff = predictions.map { id, gff -> gff }.collectFile(name: 'ab_initio.gff', sort: true)
+    INTEGRATE(genome, EVIANN.out.run_dir, EVIANN.out.gff, ab_initio_gff, eviann_sources)
 }

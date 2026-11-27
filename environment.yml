@@ -1,11 +1,10 @@
 name: chimann
 channels: [conda-forge, bioconda]
 dependencies:
-  - eviann            # bioconda 2.0.6
+  - python>=3.10     # ChimAnn adapters and local runtime installer
+  - eviann           # annotation binaries/dependencies, including SNAP
+  - transdecoder
   - gffcompare
   - gffread
-  - pytorch          # eviann --splice-model cnn (CPU build is enough; CUDA is used if present)
-  - numpy
-  - pip
-  - pip:
-      - psauron       # PyPI only (1.1.3)
+# Install the unmodified upstream eviann checkout into eviann/bin with install_eviann.py.
+# CNN-Mamba runs separately with cnn_python in an existing CUDA/Mamba environment.

@@ -1,71 +1,40 @@
-// Ab initio gene prediction with UniAnn on one segment and one strand; the output
-// is mapped back to genome coordinates (segment_genome.py unsegment).
-// UniAnn decodes the + strand only, so "-" runs on the reverse complement
-// (REVCOMP) with the sites table remapped, and the GFF is flipped back here.
-// With params.uniann_kbest = K > 0, UniAnn's gene-local k-best decoder also
-// emits up to K-1 alternative transcripts per predicted gene
-// (bin/kbest_alternatives.py), appended to the same GFF; downstream they are
-// filtered like every other ab initio transcript (novel_cds.py, EviAnn -c).
-process REVCOMP {
-    tag "$id"
+// Decode exactly the CNN probabilities; retain standardized scores for AltAnn.
+include { gitRevision; sourceDigest } from './eviann'
 
-    input:
-    tuple val(id), path(seq)
-
-    output:
-    tuple val(id), val('-'), path("${id}.rc.fa"), emit: seq
-
-    script:
-    """
-    strand_tools.py revcomp ${seq} > ${id}.rc.fa
-    """
-}
-
-process SPLIT_SITES {
-    tag "$id"
-
-    input:
-    tuple val(id), path(seq), path(sites)
-
-    output:
-    tuple val(id), val('+'), path('sites.plus.tsv'), emit: plus
-    tuple val(id), val('-'), path('sites.rc.tsv'),   emit: minus
-
-    script:
-    """
-    awk -F'\\t' 'NR==1 || \$3=="+"' ${sites} > sites.plus.tsv
-    strand_tools.py sites_rc ${seq} ${sites} > sites.rc.tsv
-    """
+def uniannSourceDigest() {
+    def decoder = params.ab_initio_decoder == 'altann'
+        ? file("${params.altann_dir}/build/altann-core") : file("${params.uniann_dir}/bin/uniann")
+    sourceDigest([file("${projectDir}/bin/run_uniann.py"),
+        file("${params.uniann_dir}/scripts/uniann.sh"), file("${params.uniann_dir}/scripts/convert_coding_frame.pl"),
+        decoder])
 }
 
 process UNIANN {
-    tag "$id $strand"
-    publishDir "${params.outdir}/uniann", mode: 'copy'
-
+    tag "$id"
+    publishDir { "${params.outdir}/uniann/${id}" }, mode: 'copy'
+    // Measured peak of the native decoder with UniAnn PR #4: 0.205 GB per Mb. Without
+    // that PR it needs about 0.31 GB per Mb, so long chromosomes would not fit.
+    memory {
+        def length = (id =~ /__(\d+)-(\d+)-\d+$/)[0].with { (it[2] as long) - (it[1] as long) }
+        def perMb = params.ab_initio_decoder == 'uniann' ? 0.21 : 0.02
+        "${Math.ceil(length / 1e6 * perMb + 4) as long} GB"
+    }
     input:
-    tuple val(id), val(strand), path(seq), path(psauron_csv), path(sites)
-
+    tuple val(id), path(scores)
+    val sources
     output:
-    tuple val(id), val(strand), path("${id}.${strand == '+' ? 'plus' : 'minus'}.uniann.gff"), emit: gff
-
+    tuple val(id), path('uniann_job'), path('uniann.gff3'), emit: jobs
     script:
-    def out = "${id}.${strand == '+' ? 'plus' : 'minus'}.uniann.gff"
-    def back = strand == '+' ? "cat ${seq}.uniann.gff" : "strand_tools.py flip_gff ${seq} ${seq}.uniann.gff | gffread -F"
-    back += " | segment_genome.py unsegment /dev/stdin --overlap ${params.segment_overlap}"
-    def K = params.uniann_kbest as int
-    def kbest = K > 0 ? "--local-k-best ${K} --local-k-output ${seq}.kbest.gff" : ''
-    def alts = K > 0 ? "kbest_alternatives.py ${seq}.kbest.gff --prefix ${seq}.kbest >> ${seq}.uniann.gff" : ''
+    def revision = gitRevision(params.uniann_dir)
+    def decoder = params.ab_initio_decoder == 'altann' ? "--altann-dir ${params.altann_dir}"
+        : (params.uniann_trace ? '' : '--no-trace')
     """
+    # uniann ${revision}
+    # decoder ${params.ab_initio_decoder} ${params.ab_initio_decoder == 'altann' ? gitRevision(params.altann_dir) : ''}
+    # decoder sources ${sources}
     export OMP_NUM_THREADS=${task.cpus}
-    # uniann.sh scales scores by the best donor and dies unless max(donor prob) * e > 1;
-    # sequences with no confident donor (e.g. mitochondria) get an empty annotation.
-    if awk -F'\t' 'NR>1 && \$4=="donor" && \$NF*2.718281828 > 1 {found=1} END {exit !found}' ${sites}; then
-        ${params.uniann_dir}/bin/uniann.sh -f ${seq} -p ${psauron_csv} -s ${sites} ${params.uniann_args} ${kbest}
-        ${alts}
-        ${back} > ${out}
-    else
-        echo "no donor with prob > 1/e in ${sites}; skipping UniAnn on ${id} ${strand}" >&2
-        printf '##gff-version 3\n' > ${out}
-    fi
+    python3 ${projectDir}/bin/run_uniann.py --input ${scores} --uniann-dir ${params.uniann_dir} ${decoder} \
+        --outdir uniann_job --output uniann.gff3 --mult ${params.score_multiplier} \
+        --overlap ${params.segment_overlap} --margin ${params.segment_margin}
     """
 }
